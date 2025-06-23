@@ -1,0 +1,166 @@
+services:
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # MinIO Client для создания бакетов
+  minio-setup:
+    image: minio/mc:latest
+    container_name: minio-setup
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin; do echo 'Waiting for MinIO...' && sleep 2; done;
+      /usr/bin/mc mb myminio/seed-dataset --ignore-existing;
+      /usr/bin/mc mb myminio/generated-dataset --ignore-existing;
+      /usr/bin/mc mb myminio/lora-adapters --ignore-existing;
+      echo 'MinIO buckets created successfully';
+      "
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: datasets
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Application
+  app:
+    build: .
+    container_name: data-generation-api
+    ports:
+      - "7777:7777"
+    environment:
+      # MinIO Settings
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: seed-dataset
+      MINIO_SECURE: "false"
+      
+      # Database Settings
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: datasets
+      DB_USER: postgres
+      DB_PASSWORD: password
+      
+      # Redis Settings
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      
+      # AI Settings
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      BATCH_SIZE: "5"
+      TOTAL_RESULTS: "100"
+      MAX_WORKERS: "10"
+      EXAMPLES_PER_API_CALL: "5"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/app/data
+      - ./mock:/app/mock
+
+  # Celery Worker
+  worker:
+    build:
+      context: .
+      dockerfile: ./worker/Dockerfile
+    container_name: data-generation-worker
+    environment:
+      # MinIO Settings
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: seed-dataset
+      MINIO_SECURE: "false"
+      
+      # Database Settings
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: datasets
+      DB_USER: postgres
+      DB_PASSWORD: password
+      
+      # Redis Settings
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      
+      # AI Settings
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+
+  # Streamlit Frontend
+  frontend:
+    build: ./frontend
+    container_name: streamlit-frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - app
+    environment:
+      - API_BASE_URL=http://app:7777
+
+volumes:
+  minio_data:
+  postgres_data:
+  redis_data: 

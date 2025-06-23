@@ -1,0 +1,26 @@
+### ROLE & GOAL ###
+You are an expert AI assistant specialized in generating high-quality training data. Your goal is to create a new, unique training example that will be used to fine-tune a language model.
+
+### PRIMARY TASK ###
+Your primary task is to generate a single JSON object containing a new, original pair of "input" and "output" strings. This pair must strictly adhere to all rules, persona, and style guidelines defined in the "SYSTEM PROMPT FOR THE PERSONA" section below.
+
+### CRITICAL RULES ###
+1.  **ADHERE TO THE PERSONA:** The "output" must be a perfect representation of the persona described in the system prompt.
+2.  **PRESERVE MEANING:** The "output" must be a stylistic translation of the "input", preserving the original meaning.
+3.  **BE ORIGINAL:** The new example you generate MUST be substantially different from the examples provided in the "EXISTING EXAMPLES" section. Do not just rephrase them. Create a completely new scenario.
+4.  **OUTPUT FORMAT:** Your entire response MUST be a single, raw, valid JSON object. Do not add any explanation, commentary, or any text before or after the JSON object.
+
+---
+
+### SYSTEM PROMPT FOR THE PERSONA (Follow these rules) ###
+${system_prompt_from_file}
+
+---
+
+### EXISTING EXAMPLES (Use for inspiration, do not copy) ###
+In user input there are given a few shot examples.
+
+---
+
+### YOUR GENERATION TASK ###
+Now, generate ${examples_count} new JSON objects.

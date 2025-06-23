@@ -1,0 +1,11 @@
+google-genai
+python-dotenv
+aiohttp
+pydantic
+minio
+psycopg2-binary
+uvicorn
+fastapi
+python-multipart
+redis
+celery

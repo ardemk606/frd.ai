@@ -1,0 +1,7 @@
+celery
+redis
+psycopg2-binary
+minio
+google-genai
+pydantic
+python-dotenv
