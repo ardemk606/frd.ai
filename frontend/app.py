@@ -125,6 +125,20 @@ def start_generation(project_id, examples_count, is_structured, output_format, j
         return None
 
 
+def start_validation(project_id):
+    """Запустить валидацию датасета"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        response = requests.post(f"{base_url}/dataset/{project_id}/validate")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при запуске валидации: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            st.error(f"Детали ошибки: {e.response.text}")
+        return None
+
+
 def show_status_pipeline(current_status):
     """Отобразить пайплайн статусов"""
     
@@ -496,7 +510,7 @@ elif st.session_state.current_page == "Детали проекта":
         else:
             st.info("Нет данных для превью")
         
-        # Кнопка следующего шага
+        # Действия с проектом
         st.divider()
         
         # Проверяем, не в финальном ли статусе
@@ -506,6 +520,34 @@ elif st.session_state.current_page == "Детали проекта":
                 if st.button("🚀 Настроить генерацию", key="setup_generation", use_container_width=True, type="primary"):
                     st.session_state.show_generation_modal = True
                     st.rerun()
+            
+            # Если статус READY_FOR_VALIDATION - показываем кнопку валидации
+            elif project['status'] == 'READY_FOR_VALIDATION':
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔍 Запустить валидацию", key="start_validation", use_container_width=True, type="primary"):
+                        with st.spinner("Запускаем валидацию датасета..."):
+                            result = start_validation(st.session_state.selected_project_id)
+                            
+                            if result and result.get("success"):
+                                st.success(f"✅ {result.get('message')}")
+                                st.info(f"🆔 ID задачи: {result.get('task_id')}")
+                                st.rerun()  # Обновляем страницу чтобы показать новый статус
+                            else:
+                                st.error("Не удалось запустить валидацию")
+                
+                with col2:
+                    if st.button("⏭️ Пропустить валидацию", key="skip_validation", use_container_width=True):
+                        with st.spinner("Переводим проект к следующему шагу..."):
+                            result = next_step_project(st.session_state.selected_project_id)
+                            
+                            if result and result.get("success"):
+                                st.success(f"✅ {result.get('message')}")
+                                st.rerun()  # Обновляем страницу чтобы показать новый статус
+                            else:
+                                st.error("Не удалось перейти к следующему шагу")
+            
             else:
                 # Для остальных статусов - простой переход
                 if st.button("▶️ Следующий шаг", key="next_step", use_container_width=True, type="primary"):

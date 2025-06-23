@@ -15,7 +15,9 @@ class Dataset:
     size_bytes: int
     system_prompt_object_name: Optional[str]
     status: str
-    uploaded_at: datetime
+    output_type: str = "TEXT"  # TEXT или JSON
+    json_schema: Optional[str] = None  # JSON схема если output_type = JSON
+    uploaded_at: datetime = None
     lora_adapter_id: Optional[int] = None
     task_id: Optional[int] = None
 
@@ -28,6 +30,8 @@ class DatasetCreate:
     size_bytes: int
     system_prompt_object_name: Optional[str]
     status: str = "NEW"
+    output_type: str = "TEXT"  # TEXT или JSON
+    json_schema: Optional[str] = None  # JSON схема если output_type = JSON
 
 
 @dataclass
@@ -35,4 +39,6 @@ class DatasetUpdate:
     """Модель для обновления датасета"""
     status: Optional[str] = None
     lora_adapter_id: Optional[int] = None
-    task_id: Optional[int] = None 
+    task_id: Optional[int] = None
+    output_type: Optional[str] = None
+    json_schema: Optional[str] = None 
