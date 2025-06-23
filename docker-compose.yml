@@ -111,12 +111,12 @@ services:
       - ./data:/app/data
       - ./mock:/app/mock
 
-  # Celery Worker
-  worker:
+  # Celery CPU Worker
+  cpu-worker:
     build:
       context: .
       dockerfile: ./worker/Dockerfile
-    container_name: data-generation-worker
+    container_name: data-generation-cpu-worker
     environment:
       # MinIO Settings
       MINIO_ENDPOINT: minio:9000
@@ -139,6 +139,50 @@ services:
       
       # AI Settings
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      
+      # Worker Settings
+      WORKER_QUEUES: "celery,cpu_queue"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+
+  # Celery GPU Worker
+  gpu-worker:
+    build:
+      context: .
+      dockerfile: ./worker/Dockerfile
+    container_name: data-generation-gpu-worker
+    environment:
+      # MinIO Settings
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: seed-dataset
+      MINIO_SECURE: "false"
+      
+      # Database Settings
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: datasets
+      DB_USER: postgres
+      DB_PASSWORD: password
+      
+      # Redis Settings
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      
+      # AI Settings
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      
+      # Worker Settings
+      WORKER_QUEUES: "gpu_queue"
     depends_on:
       postgres:
         condition: service_healthy
