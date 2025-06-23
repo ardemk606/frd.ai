@@ -3,7 +3,10 @@
 # Устанавливаем PYTHONPATH
 export PYTHONPATH=/app:$PYTHONPATH
 
-echo "Запуск Celery worker..."
+# Определяем очереди (по умолчанию CPU очереди)
+WORKER_QUEUES=${WORKER_QUEUES:-"celery,cpu_queue"}
 
-# Запускаем Celery worker с поддержкой cpu_queue и gpu_queue очередей
-celery -A celery_app worker --loglevel=info --queues=celery,cpu_queue,gpu_queue 
+echo "Запуск Celery worker с очередями: $WORKER_QUEUES"
+
+# Запускаем Celery worker с указанными очередями
+celery -A celery_app worker --loglevel=info --queues=$WORKER_QUEUES 

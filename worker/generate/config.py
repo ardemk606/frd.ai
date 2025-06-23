@@ -8,7 +8,8 @@ class GenerationConfig:
     """Конфигурация генерации данных"""
     # AI настройки
     api_key: str
-    model_name: str = "gemini-2.5-flash-lite-preview-06-17"
+    model_name: str = "gemini-2.5-flash"
+    temperature: float = 0.7
     
     # Параметры генерации
     batch_size: int = 2
@@ -27,7 +28,8 @@ class GenerationConfig:
         
         return cls(
             api_key=api_key,
-            model_name=os.getenv("AI_MODEL_NAME", "gemini-2.5-flash-lite-preview-06-17"),
+            model_name=os.getenv("AI_MODEL_NAME", "gemini-2.5-flash"),
+            temperature=float(os.getenv("AI_TEMPERATURE", "0.7")),
             batch_size=int(os.getenv("BATCH_SIZE", "2")),
             total_results=int(os.getenv("TOTAL_RESULTS", "100")),
             max_workers=int(os.getenv("MAX_WORKERS", "10")),
