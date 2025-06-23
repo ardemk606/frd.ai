@@ -1,5 +1,5 @@
 """
-FRAD - From Raw Data to AI
+FRD.ai - From Raw Data to AI
 Streamlit веб-интерфейс для управления проектами генерации данных
 """
 
@@ -10,7 +10,7 @@ import pandas as pd
 
 # Конфигурация страницы
 st.set_page_config(
-    page_title="FRAD - From Raw Data to AI",
+    page_title="FRD.ai - From Raw Data to AI",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -194,6 +194,40 @@ def show_generation_modal(project_id, project_name):
         st.subheader("🚀 Настройка генерации данных")
         st.write(f"**Проект:** {project_name}")
         
+        # Структурированный ответ - выносим ЗА пределы формы для динамического обновления
+        is_structured = st.checkbox(
+            "Структурированный ответ",
+            value=False,
+            help="Должен ли ответ модели быть в структурированном формате?",
+            key="is_structured_checkbox"
+        )
+        
+        # Формат вывода - также выносим для динамического обновления
+        if is_structured:
+            output_format = st.selectbox(
+                "Формат структурированного вывода",
+                options=["json"],
+                index=0,
+                help="Пока доступен только JSON формат",
+                key="output_format_select"
+            )
+        else:
+            st.info("Для неструктурированного ответа формат будет: text")
+            output_format = "text"
+        
+        # JSON Schema - выносим для динамического обновления
+        json_schema = None
+        if is_structured:
+            json_schema = st.text_area(
+                "JSON Schema для валидации ответа",
+                placeholder='{\n  "type": "object",\n  "properties": {\n    "answer": {"type": "string"}\n  },\n  "required": ["answer"]\n}',
+                height=150,
+                help="JSON Schema для валидации структурированного ответа модели",
+                key="json_schema_input"
+            )
+        else:
+            st.info("JSON Schema не требуется для неструктурированного ответа")
+        
         with st.form("generation_form"):
             # Количество примеров
             examples_count = st.number_input(
@@ -203,37 +237,6 @@ def show_generation_modal(project_id, project_name):
                 value=10,
                 help="От 1 до 1000 примеров"
             )
-            
-            # Структурированный ответ
-            is_structured = st.checkbox(
-                "Структурированный ответ",
-                value=False,
-                help="Должен ли ответ модели быть в структурированном формате?"
-            )
-            
-            # Формат вывода
-            if is_structured:
-                output_format = st.selectbox(
-                    "Формат структурированного вывода",
-                    options=["json"],
-                    index=0,
-                    help="Пока доступен только JSON формат"
-                )
-            else:
-                st.info("Для неструктурированного ответа формат будет: text")
-                output_format = "text"
-            
-            # JSON Schema
-            if is_structured:
-                json_schema = st.text_area(
-                    "JSON Schema для валидации ответа",
-                    placeholder='{\n  "type": "object",\n  "properties": {\n    "answer": {"type": "string"}\n  },\n  "required": ["answer"]\n}',
-                    height=150,
-                    help="JSON Schema для валидации структурированного ответа модели"
-                )
-            else:
-                st.info("JSON Schema не требуется для неструктурированного ответа")
-                json_schema = None
             
             # Валидация JSON Schema
             if is_structured and json_schema and json_schema.strip():
@@ -291,7 +294,7 @@ def show_generation_modal(project_id, project_name):
 
 
 # Заголовок
-st.title("⚡ FRAD - From Raw Data to AI")
+st.title("⚡ FRD.ai - From Raw Data to AI")
 
 # Сайдбар навигация
 with st.sidebar:

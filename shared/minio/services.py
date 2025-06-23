@@ -92,6 +92,51 @@ class DatasetService:
             logger.error(f"Ошибка получения превью датасета {object_name}: {e}")
             return [{"error": "Не удалось загрузить датасет"}]
 
+    def get_full_dataset(self, object_name: str) -> List[Dict[str, Any]]:
+        """
+        Загружает полный JSONL датасет
+        
+        Args:
+            object_name: Имя объекта в MinIO
+            
+        Returns:
+            Список всех JSON объектов из датасета
+            
+        Raises:
+            ObjectNotFoundError: Если объект не найден
+            DownloadError: При ошибке загрузки
+        """
+        try:
+            import json
+            
+            # Скачиваем весь файл как текст
+            content = self.client.download_text(object_name)
+            
+            dataset = []
+            lines = content.strip().split('\n')
+            
+            for line_num, line in enumerate(lines, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                try:
+                    json_obj = json.loads(line)
+                    dataset.append(json_obj)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Ошибка JSON в строке {line_num} объекта {object_name}: {e}")
+                    # Продолжаем обработку, не падаем на одной битой строке
+                    
+            logger.info(f"Загружен полный датасет {object_name}: {len(dataset)} записей")
+            return dataset
+            
+        except ObjectNotFoundError:
+            logger.error(f"Датасет не найден: {object_name}")
+            raise
+        except Exception as e:
+            logger.error(f"Ошибка загрузки полного датасета {object_name}: {e}")
+            raise DownloadError(f"Не удалось загрузить датасет: {str(e)}") from e
+
 
 class PromptService:
     """Сервис для работы с системными промптами"""

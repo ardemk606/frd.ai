@@ -29,7 +29,8 @@ class DatasetRepository(BaseRepository):
             with self._get_cursor() as cursor:
                 cursor.execute("""
                     SELECT id, filename, status, uploaded_at, object_name, 
-                           system_prompt_object_name, size_bytes, lora_adapter_id, task_id
+                           system_prompt_object_name, size_bytes, lora_adapter_id, task_id,
+                           output_type, schema
                     FROM datasets
                     ORDER BY uploaded_at DESC
                 """)
@@ -45,6 +46,8 @@ class DatasetRepository(BaseRepository):
                         size_bytes=row['size_bytes'],
                         system_prompt_object_name=row['system_prompt_object_name'],
                         status=row['status'],
+                        output_type=row.get('output_type', 'TEXT'),
+                        schema=row.get('schema'),
                         uploaded_at=row['uploaded_at'],
                         lora_adapter_id=row['lora_adapter_id'],
                         task_id=row['task_id']
@@ -76,7 +79,8 @@ class DatasetRepository(BaseRepository):
             with self._get_cursor() as cursor:
                 cursor.execute("""
                     SELECT id, filename, status, uploaded_at, object_name, 
-                           system_prompt_object_name, size_bytes, lora_adapter_id, task_id
+                           system_prompt_object_name, size_bytes, lora_adapter_id, task_id,
+                           output_type, schema
                     FROM datasets
                     WHERE id = %s
                 """, (dataset_id,))
@@ -93,6 +97,8 @@ class DatasetRepository(BaseRepository):
                     size_bytes=row['size_bytes'],
                     system_prompt_object_name=row['system_prompt_object_name'],
                     status=row['status'],
+                    output_type=row.get('output_type', 'TEXT'),
+                    schema=row.get('schema'),
                     uploaded_at=row['uploaded_at'],
                     lora_adapter_id=row['lora_adapter_id'],
                     task_id=row['task_id']
@@ -123,8 +129,8 @@ class DatasetRepository(BaseRepository):
         try:
             with self._get_transaction() as cursor:
                 cursor.execute("""
-                    INSERT INTO datasets (filename, object_name, size_bytes, system_prompt_object_name, status, uploaded_at)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO datasets (filename, object_name, size_bytes, system_prompt_object_name, status, output_type, schema, uploaded_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
                     dataset_data.filename,
@@ -132,6 +138,8 @@ class DatasetRepository(BaseRepository):
                     dataset_data.size_bytes,
                     dataset_data.system_prompt_object_name,
                     dataset_data.status,
+                    dataset_data.output_type,
+                    dataset_data.schema,
                     datetime.now()
                 ))
                 
@@ -237,6 +245,14 @@ class DatasetRepository(BaseRepository):
             if update_data.task_id is not None:
                 update_fields.append("task_id = %s")
                 update_values.append(update_data.task_id)
+            
+            if update_data.output_type is not None:
+                update_fields.append("output_type = %s")
+                update_values.append(update_data.output_type)
+                
+            if update_data.schema is not None:
+                update_fields.append("schema = %s")
+                update_values.append(update_data.schema)
             
             if not update_fields:
                 logger.warning(f"Нет полей для обновления датасета {dataset_id}")

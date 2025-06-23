@@ -16,7 +16,7 @@ class Dataset:
     system_prompt_object_name: Optional[str]
     status: str
     output_type: str = "TEXT"  # TEXT или JSON
-    json_schema: Optional[str] = None  # JSON схема если output_type = JSON
+    schema: Optional[str] = None  # Схема для валидации (JSON, CSV, etc.)
     uploaded_at: datetime = None
     lora_adapter_id: Optional[int] = None
     task_id: Optional[int] = None
@@ -31,7 +31,7 @@ class DatasetCreate:
     system_prompt_object_name: Optional[str]
     status: str = "NEW"
     output_type: str = "TEXT"  # TEXT или JSON
-    json_schema: Optional[str] = None  # JSON схема если output_type = JSON
+    schema: Optional[str] = None  # Схема для валидации (JSON, CSV, etc.)
 
 
 @dataclass
@@ -41,4 +41,4 @@ class DatasetUpdate:
     lora_adapter_id: Optional[int] = None
     task_id: Optional[int] = None
     output_type: Optional[str] = None
-    json_schema: Optional[str] = None 
+    schema: Optional[str] = None 

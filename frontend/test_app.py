@@ -1,5 +1,5 @@
 """
-Простая тестовая версия FRAD приложения
+Простая тестовая версия FRD.ai приложения
 """
 
 import streamlit as st
@@ -8,7 +8,7 @@ import os
 
 # Конфигурация страницы
 st.set_page_config(
-    page_title="FRAD - From Raw Data to AI",
+    page_title="FRD.ai - From Raw Data to AI",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -19,7 +19,7 @@ if "current_page" not in st.session_state:
     st.session_state.current_page = "Все проекты"
 
 # Заголовок
-st.title("⚡ FRAD - From Raw Data to AI")
+st.title("⚡ FRD.ai - From Raw Data to AI")
 
 # Сайдбар
 with st.sidebar:

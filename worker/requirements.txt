@@ -5,3 +5,4 @@ minio
 google-genai
 pydantic
 python-dotenv
+nltk

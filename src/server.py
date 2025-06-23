@@ -6,7 +6,7 @@ import logging
 from fastapi import FastAPI
 import uvicorn
 
-from .routers import health, upload, projects
+from .routers import health, upload, projects, validation
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ app = FastAPI(
 app.include_router(health.router)           # Системные эндпоинты
 app.include_router(upload.router)           # Загрузка датасетов
 app.include_router(projects.router)         # Управление проектами
+app.include_router(validation.router)       # Валидация датасетов
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS datasets (
     system_prompt_object_name VARCHAR(500),
     status VARCHAR(50) DEFAULT 'NEW',
     output_type VARCHAR(10) DEFAULT 'TEXT' CHECK (output_type IN ('TEXT', 'JSON')),
-    json_schema TEXT NULL,
+    schema TEXT NULL,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     lora_adapter_id INTEGER REFERENCES lora_adapter(id),
     task_id INTEGER REFERENCES task(id)

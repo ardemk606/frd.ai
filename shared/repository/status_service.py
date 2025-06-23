@@ -18,11 +18,18 @@ class DatasetStatusService:
         "NEW",
         "GENERATING_DATASET", 
         "READY_FOR_VALIDATION",
-        "VALIDATION",
+        "VALIDATING",
         "READY_FOR_FINE_TUNING",
         "FINE_TUNING",
         "READY_FOR_DEPLOY",
         "DEPLOYED"
+    ]
+    
+    # Статусы ошибок (не входят в основной пайплайн)
+    ERROR_STATUSES = [
+        "VALIDATION_FAILED",
+        "FINE_TUNING_FAILED",
+        "DEPLOYMENT_FAILED"
     ]
     
     def __init__(self, repository: DatasetRepository):
@@ -139,4 +146,26 @@ class DatasetStatusService:
             self.get_next_status(current_status)
             return True
         except (ValidationError, Exception):
-            return False 
+            return False
+    
+    def is_status_allowed(self, current_status: str, new_status: str) -> bool:
+        """
+        Проверяет разрешен ли переход от current_status к new_status
+        """
+        # Специальные случаи
+        if new_status in self.ERROR_STATUSES:
+            # Можно перейти в статус ошибки из любого статуса
+            return True
+            
+        if current_status in self.ERROR_STATUSES:
+            # Из статуса ошибки можно вернуться только в начало или перепройти валидацию
+            return new_status in ["NEW", "READY_FOR_VALIDATION", "VALIDATING"]
+        
+        if current_status not in self.STATUS_PIPELINE or new_status not in self.STATUS_PIPELINE:
+            return False
+        
+        current_index = self.STATUS_PIPELINE.index(current_status)
+        new_index = self.STATUS_PIPELINE.index(new_status)
+        
+        # Можно переходить только к следующему статусу или повторить текущий
+        return new_index >= current_index 
