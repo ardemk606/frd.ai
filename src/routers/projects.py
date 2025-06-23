@@ -17,11 +17,10 @@ from ..models.projects import (
     ProjectDetailResponse,
     ProjectDetailInfo
 )
+from ..dependencies import get_dataset_repository, get_dataset_status_service
 from shared.repository import (
     DatasetRepository, 
     DatasetStatusService, 
-    get_dataset_repository,
-    get_dataset_status_service,
     DatasetNotFoundError,
     RepositoryError,
     ValidationError

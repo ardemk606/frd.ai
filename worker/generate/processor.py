@@ -17,7 +17,9 @@ from shared.minio import (
     ObjectNotFoundError
 )
 from shared.repository import (
-    get_dataset_repository,
+    DatasetRepository,
+    get_database_connection,
+    create_dataset_repository,
     DatasetNotFoundError, 
     RepositoryError
 )
@@ -44,9 +46,12 @@ class SelfInstructProcessor:
         logger.info(f"Начало процесса генерации данных для проекта {project_id}")
 
         try:
-            # Загружаем seed примеры через наш MinIO API
-            seed_object_name = f"project_{project_id}/seed_data.jsonl"
-            seed_examples = self.dataset_service.get_dataset_preview(seed_object_name)
+            # Получаем информацию о датасете из БД
+            dataset_repository = create_dataset_repository()
+            dataset = dataset_repository.get_by_id(project_id)
+            
+            # Загружаем seed примеры через наш MinIO API используя реальный object_name
+            seed_examples = self.dataset_service.get_dataset_preview(dataset.object_name)
             
             if not seed_examples:
                 raise ValueError(f"Не найдены seed-примеры для проекта {project_id}")
@@ -56,6 +61,9 @@ class SelfInstructProcessor:
         except (ObjectNotFoundError, MinIOError) as e:
             logger.error(f"Ошибка загрузки seed-примеров: {e}")
             raise ValueError(f"Не удалось загрузить данные для проекта {project_id}")
+        except (DatasetNotFoundError, RepositoryError) as e:
+            logger.error(f"Ошибка получения информации о датасете: {e}")
+            raise ValueError(f"Проект {project_id} не найден в базе данных")
 
         all_results: List[Dict[str, Any]] = []
 
@@ -95,6 +103,16 @@ class SelfInstructProcessor:
                 project_id, final_results
             )
             logger.info(f"Обработка завершена. Итого сохранено: {len(final_results)} результатов.")
+            
+            # Обновляем статус проекта после успешной генерации
+            try:
+                dataset_repository = create_dataset_repository()
+                dataset_repository.update_status(project_id, "READY_FOR_VALIDATION")
+                logger.info(f"Статус проекта {project_id} обновлен на READY_FOR_VALIDATION")
+            except Exception as e:
+                logger.error(f"Ошибка обновления статуса проекта {project_id}: {e}")
+                # Не прерываем выполнение, так как данные уже сохранены
+            
             return output_file
         except (MinIOError, Exception) as e:
             logger.error(f"Ошибка сохранения результатов: {e}")
@@ -120,8 +138,8 @@ class DataProcessor:
     """Обертка для обработки запросов генерации через Celery"""
     
     def __init__(self):
-        # Используем наш repository API
-        self.dataset_repository = get_dataset_repository()
+        # Используем наш repository API с подключением к БД
+        pass
     
     def process_generation_request(self, generation_params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -142,7 +160,8 @@ class DataProcessor:
             
             # Проверяем существование проекта через repository
             try:
-                dataset = self.dataset_repository.get_by_id(project_id)
+                dataset_repository = create_dataset_repository()
+                dataset = dataset_repository.get_by_id(project_id)
                 logger.info(f"Найден датасет для проекта {project_id}: {dataset.object_name}")
             except DatasetNotFoundError:
                 raise ValueError(f"Проект {project_id} не найден в базе данных")

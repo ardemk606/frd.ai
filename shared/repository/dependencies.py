@@ -1,45 +1,29 @@
 """
 Зависимости для инъекции репозиториев
 """
-from functools import lru_cache
-from typing import Generator
-
 from .dataset_repository import DatasetRepository
 from .status_service import DatasetStatusService
+from .database import get_db_connection
 
 
-def get_dataset_repository(db_connection) -> Generator[DatasetRepository, None, None]:
+def create_dataset_repository() -> DatasetRepository:
     """
-    Фабрика для создания DatasetRepository
+    Создать экземпляр DatasetRepository с подключением к БД
     
-    Args:
-        db_connection: Подключение к базе данных
-        
-    Yields:
+    Returns:
         Экземпляр DatasetRepository
     """
-    repository = DatasetRepository(db_connection)
-    try:
-        yield repository
-    finally:
-        # Здесь можно добавить логику очистки ресурсов
-        pass
+    db_connection = get_db_connection()
+    return DatasetRepository(db_connection)
 
 
-def get_dataset_status_service(db_connection) -> Generator[DatasetStatusService, None, None]:
+def create_dataset_status_service() -> DatasetStatusService:
     """
-    Фабрика для создания DatasetStatusService
+    Создать экземпляр DatasetStatusService с подключением к БД
     
-    Args:
-        db_connection: Подключение к базе данных
-        
-    Yields:
+    Returns:
         Экземпляр DatasetStatusService
     """
+    db_connection = get_db_connection()
     repository = DatasetRepository(db_connection)
-    service = DatasetStatusService(repository)
-    try:
-        yield service
-    finally:
-        # Здесь можно добавить логику очистки ресурсов
-        pass 
+    return DatasetStatusService(repository) 

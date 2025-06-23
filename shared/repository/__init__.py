@@ -1,21 +1,36 @@
 """
-Repository пакет для работы с данными
+Shared модуль для работы с репозиториями
 """
-from .dataset_repository import DatasetRepository
+
 from .models import Dataset, DatasetCreate, DatasetUpdate
-from .exceptions import RepositoryError, DatasetNotFoundError, ValidationError
+from .exceptions import DatasetNotFoundError, RepositoryError, ValidationError
+from .dataset_repository import DatasetRepository
 from .status_service import DatasetStatusService
-from .dependencies import get_dataset_repository, get_dataset_status_service
+from .dependencies import create_dataset_repository, create_dataset_status_service
+from .database import get_db_connection, get_database_connection
 
 __all__ = [
-    "DatasetRepository", 
-    "Dataset", 
+    # Модели данных
+    "Dataset",
     "DatasetCreate", 
     "DatasetUpdate",
-    "RepositoryError", 
-    "DatasetNotFoundError", 
+    
+    # Исключения
+    "DatasetNotFoundError",
+    "RepositoryError",
     "ValidationError",
+    
+    # Репозитории
+    "DatasetRepository",
+    
+    # Сервисы
     "DatasetStatusService",
-    "get_dataset_repository",
-    "get_dataset_status_service"
+    
+    # Фабрики (без FastAPI)
+    "create_dataset_repository",
+    "create_dataset_status_service",
+    
+    # База данных
+    "get_db_connection",
+    "get_database_connection",
 ] 

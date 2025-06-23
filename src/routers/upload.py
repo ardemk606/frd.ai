@@ -8,10 +8,10 @@ from io import BytesIO
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 
 from ..models import UploadResponse
+from ..dependencies import get_dataset_repository
 from shared.repository import (
     DatasetRepository,
     DatasetCreate,
-    get_dataset_repository,
     RepositoryError
 )
 from shared.minio import (
