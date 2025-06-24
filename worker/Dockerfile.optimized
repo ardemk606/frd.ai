@@ -16,13 +16,11 @@ WORKDIR /app
 # =============================================================================
 FROM base as dependencies
 
-# КРИТИЧНО: Сначала копируем и устанавливаем только requirements.txt
-# Это позволяет Docker кешировать слой с зависимостями
+# Копируем только requirements.txt для кеширования
 COPY worker/requirements.txt ./requirements.txt
 
-# Устанавливаем Python зависимости (включая PyTorch)
-# Этот слой будет закеширован и не будет переустанавливаться
-# пока не изменится requirements.txt
+# Устанавливаем зависимости в отдельный слой
+# Этот слой НЕ БУДЕТ пересобираться пока не изменится requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # =============================================================================
@@ -30,22 +28,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 # =============================================================================
 FROM dependencies as final
 
-# Создаем необходимые директории
+# Создаем структуру директорий
 RUN mkdir -p shared data mock
 
-# Копируем код ПОСЛЕ установки зависимостей
-# Изменения в коде не будут инвалидировать кеш зависимостей
+# Копируем код приложения (изменения здесь НЕ затронут кеш зависимостей)
 COPY worker/ .
 COPY shared/ ./shared/
 COPY data/ ./data/
 COPY mock/ ./mock/
 
-# Делаем start.sh исполняемым
+# Настройка прав доступа
 RUN chmod +x start.sh
 
 # Переменные окружения для оптимизации
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Запускаем Redis consumer и Celery worker
+# Запуск приложения
 CMD ["./start.sh"] 

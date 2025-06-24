@@ -30,9 +30,12 @@ logger = logging.getLogger(__name__)
 class SelfInstructProcessor:
     """Основной класс для обработки self-instruct данных"""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, system_prompt_path: str):
         self.config = config
-        self.generator = ResponseGenerator(config)
+        self.generator = ResponseGenerator(
+            system_prompt_path=system_prompt_path,
+            user_prompt_path="/app/data/prompt/data_generator_prompt.txt"
+        )
         # Используем наш новый API вместо старых классов
         minio_client = get_minio_client()
         self.dataset_service = DatasetService(minio_client)
@@ -125,7 +128,10 @@ def main():
 
     try:
         config = Config.from_env()
-        processor = SelfInstructProcessor(config)
+        # Для отладки получаем системный промпт из датасета
+        dataset_repository = create_dataset_repository()
+        dataset = dataset_repository.get_by_id(1)
+        processor = SelfInstructProcessor(config, dataset.system_prompt_object_name)
         # Для отладки используем проект ID = 1
         output_file = processor.process_all(project_id=1)
         print(f"Результаты сохранены в файл: {output_file}")
@@ -174,7 +180,7 @@ class DataProcessor:
             config.total_results = generation_params.get('examples_count', 30)
             
             # Запускаем процесс генерации
-            processor = SelfInstructProcessor(config)
+            processor = SelfInstructProcessor(config, dataset.system_prompt_object_name)
             output_file = processor.process_all(project_id)
             
             return {

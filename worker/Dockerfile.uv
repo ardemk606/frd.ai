@@ -1,0 +1,68 @@
+# =============================================================================
+# УЛЬТРА-БЫСТРЫЙ DOCKERFILE С UV
+# UV - это супер быстрый Python package manager, в разы быстрее pip
+# =============================================================================
+FROM python:3.11-slim as base
+
+# Установка системных зависимостей
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Установка UV - ультра быстрого менеджера пакетов Python
+RUN pip install uv
+
+WORKDIR /app
+
+# =============================================================================
+# STAGE 2: Кеширование Python зависимостей с UV (В РАЗЫ БЫСТРЕЕ!)
+# =============================================================================
+FROM base as dependencies
+
+# Копируем только requirements.txt для кеширования
+COPY worker/requirements.txt ./requirements.txt
+
+# Создаем виртуальное окружение с UV
+RUN uv venv /opt/venv
+
+# Активируем виртуальное окружение
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Устанавливаем зависимости с UV (В РАЗЫ БЫСТРЕЕ pip!)
+# UV использует параллельную загрузку и кеширование
+# Сначала устанавливаем PyTorch отдельно
+RUN uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Потом остальные зависимости (без строки с torch)
+RUN grep -v "torch --index-url" requirements.txt > requirements_clean.txt && \
+    uv pip install -r requirements_clean.txt
+
+# =============================================================================
+# STAGE 3: Финальный образ с кодом
+# =============================================================================
+FROM dependencies as final
+
+# Создаем структуру директорий
+RUN mkdir -p shared data mock
+
+# Копируем код приложения
+COPY worker/ .
+COPY shared/ ./shared/
+COPY data/ ./data/
+COPY mock/ ./mock/
+
+# Настройка прав доступа
+RUN chmod +x start.sh
+
+# Переменные окружения для оптимизации
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Убеждаемся что виртуальное окружение активно
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Запуск приложения
+CMD ["./start.sh"] 

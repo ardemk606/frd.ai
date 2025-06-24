@@ -115,7 +115,10 @@ services:
   cpu-worker:
     build:
       context: .
-      dockerfile: ./worker/Dockerfile
+      dockerfile: ./worker/Dockerfile.uv
+      # Кеширование для быстрой пересборки
+      cache_from:
+        - python:3.11-slim
     container_name: data-generation-cpu-worker
     environment:
       # MinIO Settings
@@ -173,6 +176,9 @@ services:
     build:
       context: .
       dockerfile: ./worker/Dockerfile
+      # Кеширование для быстрой пересборки
+      cache_from:
+        - python:3.11-slim
     container_name: data-generation-gpu-worker
     environment:
       # MinIO Settings
