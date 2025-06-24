@@ -9,10 +9,10 @@ minio==7.2.7
 numpy
 datasets
 evaluate
-torch
+torch --index-url https://download.pytorch.org/whl/cpu
 peft
 transformers
-bitsandbytes
+# bitsandbytes
 accelerate
 scipy
 BLEU

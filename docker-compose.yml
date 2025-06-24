@@ -163,6 +163,10 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+    volumes:
+      - ./worker:/app
+      - ./shared:/app/shared
+      - ./data:/app/data
 
   # Celery GPU Worker
   gpu-worker:
@@ -216,6 +220,10 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+    volumes:
+      - ./worker:/app
+      - ./shared:/app/shared
+      - ./data:/app/data
 
   # Streamlit Frontend
   frontend:
