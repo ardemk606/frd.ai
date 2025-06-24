@@ -272,4 +272,47 @@ def start_generation(
         raise HTTPException(
             status_code=500,
             detail=f"Ошибка при запуске генерации: {str(e)}"
-        ) 
+        )
+
+
+@router.post("/{project_id}/start_fine_tuning")
+async def start_fine_tuning(
+    project_id: int,
+    dataset_repository: DatasetRepository = Depends(get_dataset_repository)
+):
+    """Запускает LoRA fine-tuning для проекта"""
+    
+    # Получаем датасет
+    dataset = dataset_repository.get_by_id(project_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Датасет не найден")
+    
+    # Проверяем статус
+    if dataset.status != "READY_FOR_FINE_TUNING":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Датасет не готов для fine-tuning. Текущий статус: {dataset.status}"
+        )
+    
+    # Обновляем статус
+    dataset_repository.update_status(project_id, "FINE_TUNING")
+    
+    # Отправляем задачу в gpu_queue
+    from src.dependencies import get_celery_app
+    celery_app = get_celery_app()
+    
+    task = celery_app.send_task(
+        'tasks.fine_tune_lora_task',
+        args=[{
+            'dataset_id': project_id
+        }],
+        queue='gpu_queue'
+    )
+    
+    return {
+        "success": True,
+        "message": "Fine-tuning запущен",
+        "task_id": task.id,
+        "queue_name": "gpu_queue",
+        "status": "FINE_TUNING"
+    } 

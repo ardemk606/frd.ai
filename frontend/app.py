@@ -139,6 +139,20 @@ def start_validation(project_id):
         return None
 
 
+def start_fine_tuning(project_id):
+    """Запустить LoRA fine-tuning"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        response = requests.post(f"{base_url}/projects/{project_id}/start_fine_tuning")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при запуске fine-tuning: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            st.error(f"Детали ошибки: {e.response.text}")
+        return None
+
+
 def show_status_pipeline(current_status):
     """Отобразить пайплайн статусов"""
     
@@ -550,6 +564,20 @@ elif st.session_state.current_page == "Детали проекта":
                                 st.rerun()  # Обновляем страницу чтобы показать новый статус
                             else:
                                 st.error("Не удалось перейти к следующему шагу")
+            
+            # Если статус READY_FOR_FINE_TUNING - показываем кнопку fine-tuning
+            elif project['status'] == 'READY_FOR_FINE_TUNING':
+                if st.button("🔥 Запустить LoRA Fine-tuning", key="start_fine_tuning", use_container_width=True, type="primary"):
+                    with st.spinner("Запускаем LoRA дообучение..."):
+                        result = start_fine_tuning(st.session_state.selected_project_id)
+                        
+                        if result and result.get("success"):
+                            st.success(f"✅ {result.get('message')}")
+                            st.info(f"🆔 ID задачи: {result.get('task_id')}")
+                            st.info(f"📋 Очередь: {result.get('queue_name')}")
+                            st.rerun()  # Обновляем страницу чтобы показать новый статус
+                        else:
+                            st.error("Не удалось запустить fine-tuning")
             
             else:
                 # Для остальных статусов - простой переход

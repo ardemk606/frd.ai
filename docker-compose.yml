@@ -140,6 +140,18 @@ services:
       # AI Settings
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       
+      # LoRA Settings
+      LORA_MODEL_NAME: "mistralai/Mistral-7B-Instruct-v0.1"
+      LORA_MAX_LENGTH: "512"
+      LORA_NUM_EPOCHS: "3"
+      LORA_BATCH_SIZE: "4"
+      LORA_GRAD_ACCUM_STEPS: "2"
+      LORA_LOGGING_STEPS: "10"
+      LORA_SAVE_STEPS: "500"
+      LORA_EVAL_STEPS: "500"
+      LORA_WARMUP_STEPS: "100"
+      LORA_N_TRIALS: "20"
+      
       # Worker Settings
       WORKER_QUEUES: "celery,cpu_queue"
     depends_on:
@@ -180,6 +192,18 @@ services:
       
       # AI Settings
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      
+      # LoRA Settings
+      LORA_MODEL_NAME: "mistralai/Mistral-7B-Instruct-v0.1"
+      LORA_MAX_LENGTH: "512"
+      LORA_NUM_EPOCHS: "3"
+      LORA_BATCH_SIZE: "4"
+      LORA_GRAD_ACCUM_STEPS: "2"
+      LORA_LOGGING_STEPS: "10"
+      LORA_SAVE_STEPS: "500"
+      LORA_EVAL_STEPS: "500"
+      LORA_WARMUP_STEPS: "100"
+      LORA_N_TRIALS: "20"
       
       # Worker Settings
       WORKER_QUEUES: "gpu_queue"
