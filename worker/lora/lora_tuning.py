@@ -5,8 +5,15 @@ from typing import Dict, Any, List
 import json
 import os
 import tempfile
-from .bayesian_optimizer import BayesianOptimizer
-from .lora_tuning_config import LoRATuningConfig
+
+# Импорты из того же пакета
+try:
+    from .bayesian_optimizer import BayesianOptimizer
+    from .lora_tuning_config import LoRATuningConfig
+except ImportError:
+    # Если запускаем напрямую, импортируем абсолютно
+    from lora.bayesian_optimizer import BayesianOptimizer
+    from lora.lora_tuning_config import LoRATuningConfig
 
 
 def load_model():
