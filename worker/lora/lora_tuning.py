@@ -20,17 +20,37 @@ def load_model():
     """Загружает модель Mistral"""
     model_name = "mistralai/Mistral-7B-Instruct-v0.3"
     
-    # Загружаем токенизатор
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    print(f"🔥 Загрузка модели: {model_name}")
     
-    # Загружаем модель
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-    
-    # Определяем устройство
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)
-    
-    return model, tokenizer
+    try:
+        # Загружаем токенизатор
+        print("📝 Загрузка токенизатора...")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        
+        # Устанавливаем pad_token если его нет
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            print("⚠️ Установлен pad_token = eos_token")
+        
+        print("✅ Токенизатор загружен")
+        
+        # Загружаем модель
+        print("🤖 Загрузка модели...")
+        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
+        print("✅ Модель загружена")
+        
+        # Определяем устройство
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"💻 Устройство: {device}")
+        
+        model = model.to(device)
+        print(f"✅ Модель перенесена на {device}")
+        
+        return model, tokenizer
+        
+    except Exception as e:
+        print(f"❌ Ошибка при загрузке модели: {e}")
+        raise
 
 def setup_lora_model(model, lora_params: Dict[str, Any]):
     """Настраивает LoRA для модели"""
@@ -117,16 +137,27 @@ class LoRATuner:
         
     def load_data(self, data_path: str) -> None:
         """Загружает данные для обучения"""
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = [json.loads(line) for line in f]
+        print(f"📖 Загрузка данных из {data_path}...")
         
-        print(f"Загружено {len(data)} примеров из {data_path}")
-        
-        # Загружаем модель и токенизатор
-        self.model, self.tokenizer = load_model()
-        
-        # Подготавливаем датасет
-        self.dataset = prepare_dataset(data, self.tokenizer)
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = [json.loads(line) for line in f]
+            
+            print(f"✅ Загружено {len(data)} примеров из {data_path}")
+            
+            # Загружаем модель и токенизатор
+            print("🤖 Загрузка модели и токенизатора...")
+            self.model, self.tokenizer = load_model()
+            print("✅ Модель и токенизатор загружены")
+            
+            # Подготавливаем датасет
+            print("📊 Подготовка датасета...")
+            self.dataset = prepare_dataset(data, self.tokenizer)
+            print("✅ Датасет подготовлен")
+            
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке данных: {e}")
+            raise
         
     def objective_function(self, trial) -> float:
         """Целевая функция для байесовской оптимизации"""
@@ -200,30 +231,62 @@ class LoRATuner:
 if __name__ == "__main__":
     """Точка входа для прямого запуска дообучения LoRA"""
     import argparse
+    import sys
+    import traceback
     
-    parser = argparse.ArgumentParser(description="Запуск дообучения LoRA с байесовской оптимизацией")
-    parser.add_argument("--data", type=str, required=True, 
-                       help="Путь к файлу с данными для обучения (JSONL)")
-    parser.add_argument("--output", type=str, default="./lora_results",
-                       help="Директория для сохранения результатов")
-    parser.add_argument("--trials", type=int, default=5,
-                       help="Количество попыток байесовской оптимизации")
-    
-    args = parser.parse_args()
-    
-    # Создаем конфигурацию
-    config = LoRATuningConfig.from_env()
-    config.n_trials = args.trials
-    
-    # Создаем и запускаем тюнер
-    tuner = LoRATuner(config)
+    print("🚀 Запуск дообучения LoRA...")
+    print(f"Python версия: {sys.version}")
+    print(f"Аргументы командной строки: {sys.argv}")
     
     try:
+        parser = argparse.ArgumentParser(description="Запуск дообучения LoRA с байесовской оптимизацией")
+        parser.add_argument("--data", type=str, required=True, 
+                           help="Путь к файлу с данными для обучения (JSONL)")
+        parser.add_argument("--output", type=str, default="./lora_results",
+                           help="Директория для сохранения результатов")
+        parser.add_argument("--trials", type=int, default=5,
+                           help="Количество попыток байесовской оптимизации")
+        
+        print("📋 Парсинг аргументов...")
+        args = parser.parse_args()
+        print(f"✅ Аргументы получены: data={args.data}, output={args.output}, trials={args.trials}")
+        
+        # Проверяем существование файла
+        print(f"📂 Проверка файла данных: {args.data}")
+        if not os.path.exists(args.data):
+            print(f"❌ ОШИБКА: Файл {args.data} не найден!")
+            sys.exit(1)
+        else:
+            print(f"✅ Файл найден: {args.data}")
+        
+        # Создаем конфигурацию
+        print("⚙️ Создание конфигурации...")
+        config = LoRATuningConfig.from_env()
+        config.n_trials = args.trials
+        print(f"✅ Конфигурация создана: trials={config.n_trials}")
+        
+        # Создаем и запускаем тюнер
+        print("🤖 Создание LoRATuner...")
+        tuner = LoRATuner(config)
+        print("✅ LoRATuner создан")
+        
+        print("🎯 Запуск оптимизации...")
         results = tuner.run_optimization(args.data, args.output)
+        
         print("✅ Дообучение LoRA успешно завершено!")
         print(f"📊 Лучшие параметры: {results['best_params']}")
         print(f"📁 Результаты сохранены в: {results['output_dir']}")
         
+    except KeyboardInterrupt:
+        print("\n⚠️ Прервано пользователем")
+        sys.exit(1)
+    except ImportError as e:
+        print(f"❌ Ошибка импорта: {e}")
+        print("💡 Возможно, не установлены необходимые зависимости")
+        traceback.print_exc()
+        sys.exit(1)
     except Exception as e:
-        print(f"❌ Ошибка при дообучении: {e}")
-        exit(1) 
+        print(f"❌ Неожиданная ошибка: {e}")
+        print("🔍 Полная трассировка:")
+        traceback.print_exc()
+        sys.exit(1) 
