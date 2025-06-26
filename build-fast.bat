@@ -5,7 +5,7 @@ set DOCKER_BUILDKIT=1
 set COMPOSE_DOCKER_CLI_BUILD=1
 
 echo 📦 Сборка с UV (в разы быстрее pip)...
-docker-compose build cpu-worker
+docker-compose build
 
 if %errorlevel% neq 0 (
     echo ❌ Ошибка сборки
@@ -15,6 +15,4 @@ if %errorlevel% neq 0 (
 echo 🚀 Запуск контейнеров...
 docker-compose up -d
 
-echo ✅ Готово! Логи:
-timeout /t 3 /nobreak > nul
-docker-compose logs --tail=10 cpu-worker 
+echo ✅ Готово!

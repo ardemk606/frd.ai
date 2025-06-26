@@ -298,7 +298,6 @@ async def start_fine_tuning(
     dataset_repository.update_status(project_id, "FINE_TUNING")
     
     # Отправляем задачу в gpu_queue
-    from src.dependencies import get_celery_app
     celery_app = get_celery_app()
     
     task = celery_app.send_task(

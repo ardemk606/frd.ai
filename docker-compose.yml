@@ -175,7 +175,7 @@ services:
   gpu-worker:
     build:
       context: .
-      dockerfile: ./worker/Dockerfile
+      dockerfile: ./worker/Dockerfile.uv
       # Кеширование для быстрой пересборки
       cache_from:
         - python:3.11-slim

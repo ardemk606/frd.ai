@@ -22,7 +22,7 @@ class GeminiClient:
             
         self.client = genai.Client(api_key=api_key)
     
-    def generate_content(self, system_instruction: str, contents: str, model: str = "gemini-2.5-flash") -> str:
+    def generate_content(self, system_instruction: str, contents: str, model: str = "gemini-2.5-flash", max_retries: int = 3) -> str:
         """
         Генерирует контент с системной инструкцией
         
@@ -33,13 +33,22 @@ class GeminiClient:
             
         Returns:
             Сгенерированный текст
+            
+        Raises:
+            Exception: Если все попытки исчерпаны
         """
-        response = self.client.models.generate_content(
-            model=model,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction
-            ),
-            contents=contents
-        )
-        
+        try:
+            response = self.client.models.generate_content(
+                model=model,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction
+                ),
+                contents=contents
+            )
+        except Exception as e:
+            if self.max_retries > 0:
+                return self.generate_content(system_instruction, contents, model, max_retries - 1)
+            else:
+                raise e
+                    
         return response.text
