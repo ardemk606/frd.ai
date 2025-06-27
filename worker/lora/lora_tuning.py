@@ -1,9 +1,13 @@
+import os
+# Отключаем JIT компиляцию CUDA чтобы избежать проблем с Python.h
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
 from peft import LoraConfig, get_peft_model, TaskType
 from typing import Dict, Any, List
 import json
-import os
 import tempfile
 
 # Импорты из того же пакета
@@ -16,9 +20,12 @@ except ImportError:
     from lora.lora_tuning_config import LoRATuningConfig
 
 
-def load_model():
-    """Загружает модель Mistral"""
-    model_name = "mistralai/Mistral-7B-Instruct-v0.3"
+def load_model(model_name: str = "mistralai/Mistral-7B-Instruct-v0.3"):
+    """Загружает модель
+    
+    Args:
+        model_name: Название модели для загрузки
+    """
     
     print(f"🔥 Загрузка модели: {model_name}")
     
@@ -135,8 +142,13 @@ class LoRATuner:
         self.tokenizer = None
         self.dataset = None
         
-    def load_data(self, data_path: str) -> None:
-        """Загружает данные для обучения"""
+    def load_data(self, data_path: str, model_name: str = None) -> None:
+        """Загружает данные для обучения
+        
+        Args:
+            data_path: Путь к файлу с данными
+            model_name: Название модели для загрузки
+        """
         print(f"📖 Загрузка данных из {data_path}...")
         
         try:
@@ -147,7 +159,8 @@ class LoRATuner:
             
             # Загружаем модель и токенизатор
             print("🤖 Загрузка модели и токенизатора...")
-            self.model, self.tokenizer = load_model()
+            model_to_use = model_name or self.config.model_name
+            self.model, self.tokenizer = load_model(model_to_use)
             print("✅ Модель и токенизатор загружены")
             
             # Подготавливаем датасет
@@ -188,12 +201,18 @@ class LoRATuner:
                 print(f"Ошибка в trial {trial.number}: {e}")
                 return 0.0
     
-    def run_optimization(self, data_path: str, output_dir: str = "./lora_results") -> Dict[str, Any]:
-        """Запускает полный цикл оптимизации и дообучения"""
+    def run_optimization(self, data_path: str, output_dir: str = "./lora_results", model_name: str = None) -> Dict[str, Any]:
+        """Запускает полный цикл оптимизации и дообучения
+        
+        Args:
+            data_path: Путь к файлу с данными
+            output_dir: Директория для сохранения результатов
+            model_name: Название модели для загрузки
+        """
         print("Начинаем дообучение LoRA с байесовской оптимизацией...")
         
         # Загружаем данные
-        self.load_data(data_path)
+        self.load_data(data_path, model_name)
         
         # Запускаем байесовскую оптимизацию
         print(f"Запускаем оптимизацию на {self.config.n_trials} попыток...")
@@ -246,10 +265,17 @@ if __name__ == "__main__":
                            help="Директория для сохранения результатов")
         parser.add_argument("--trials", type=int, default=5,
                            help="Количество попыток байесовской оптимизации")
+        parser.add_argument("--model", type=str, default="mistralai/Mistral-7B-Instruct-v0.3",
+                           help="Название модели для дообучения. Популярные варианты: "
+                                "mistralai/Mistral-7B-Instruct-v0.3, "
+                                "microsoft/DialoGPT-medium, "
+                                "meta-llama/Llama-2-7b-chat-hf, "
+                                "HuggingFaceH4/zephyr-7b-beta. "
+                                "По умолчанию: mistralai/Mistral-7B-Instruct-v0.3")
         
         print("📋 Парсинг аргументов...")
         args = parser.parse_args()
-        print(f"✅ Аргументы получены: data={args.data}, output={args.output}, trials={args.trials}")
+        print(f"✅ Аргументы получены: data={args.data}, output={args.output}, trials={args.trials}, model={args.model}")
         
         # Проверяем существование файла
         print(f"📂 Проверка файла данных: {args.data}")
@@ -271,7 +297,7 @@ if __name__ == "__main__":
         print("✅ LoRATuner создан")
         
         print("🎯 Запуск оптимизации...")
-        results = tuner.run_optimization(args.data, args.output)
+        results = tuner.run_optimization(args.data, args.output, args.model)
         
         print("✅ Дообучение LoRA успешно завершено!")
         print(f"📊 Лучшие параметры: {results['best_params']}")

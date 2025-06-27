@@ -42,7 +42,8 @@ class BayesianOptimizer:
             Словарь с параметрами LoRA
         """
         rank = trial.suggest_categorical('rank', [8, 16, 32, 64])
-        lora_alpha = 2 * rank  # lora_alpha = 2 * rank
+        # lora_alpha должен быть suggest'ен, чтобы попасть в best_params
+        lora_alpha = trial.suggest_categorical('lora_alpha', [2 * rank])  # фиксированное значение
         
         return {
             'rank': rank,
