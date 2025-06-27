@@ -29,7 +29,12 @@ class BayesianOptimizer:
         # Запускаем оптимизацию
         self.study.optimize(objective_function, n_trials=self.n_trials)
         
-        return self.study.best_params
+        # Получаем лучшие параметры и добавляем lora_alpha
+        best_params = self.study.best_params.copy()
+        if 'rank' in best_params:
+            best_params['lora_alpha'] = 2 * best_params['rank']
+        
+        return best_params
     
     def suggest_lora_params(self, trial: optuna.Trial) -> Dict[str, Any]:
         """
@@ -42,8 +47,10 @@ class BayesianOptimizer:
             Словарь с параметрами LoRA
         """
         rank = trial.suggest_categorical('rank', [8, 16, 32, 64])
-        # lora_alpha должен быть suggest'ен, чтобы попасть в best_params
-        lora_alpha = trial.suggest_categorical('lora_alpha', [2 * rank])  # фиксированное значение
+        
+        # Вычисляем lora_alpha как 2 * rank, но не suggest'им его
+        # так как он зависит от rank (будет добавлен вручную)
+        lora_alpha = 2 * rank
         
         return {
             'rank': rank,

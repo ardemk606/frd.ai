@@ -87,9 +87,18 @@ def prepare_dataset(data: List[Dict[str, str]], tokenizer):
     
     # Токенизируем
     def tokenize_function(examples):
-        return tokenizer(examples["text"], truncation=True, padding=True, max_length=512)
+        # Токенизируем с правильными параметрами
+        tokens = tokenizer(
+            examples["text"], 
+            truncation=True, 
+            padding=True, 
+            max_length=512
+        )
+        # Добавляем labels для causal language modeling (копируем input_ids)
+        tokens["labels"] = tokens["input_ids"]
+        return tokens
     
-    tokenized_dataset = dataset.map(tokenize_function, batched=True)
+    tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
     return tokenized_dataset
 
 def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], output_dir: str):
@@ -101,14 +110,16 @@ def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], outpu
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=3,
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=2,
+        per_device_train_batch_size=2,  # Уменьшил batch size для стабильности
+        gradient_accumulation_steps=4,  # Увеличил grad accumulation
         learning_rate=lora_params['learning_rate'],
         logging_steps=10,
         save_steps=500,
         eval_steps=500,
         warmup_steps=100,
         remove_unused_columns=False,
+        dataloader_drop_last=True,  # Избегаем проблем с разными размерами батчей
+        fp16=True,  # Используем mixed precision для экономии памяти
     )
     
     # Создаем тренер
