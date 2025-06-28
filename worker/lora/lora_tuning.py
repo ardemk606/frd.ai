@@ -9,6 +9,7 @@ from peft import LoraConfig, get_peft_model, TaskType
 from typing import Dict, Any, List
 import json
 import tempfile
+import logging
 
 # Импорты из того же пакета
 try:
@@ -19,6 +20,8 @@ except ImportError:
     from lora.bayesian_optimizer import BayesianOptimizer
     from lora.lora_tuning_config import LoRATuningConfig
 
+logger = logging.getLogger(__name__)
+
 
 def load_model(model_name: str = "Qwen/Qwen3-0.6B"):
     """Загружает модель
@@ -27,36 +30,36 @@ def load_model(model_name: str = "Qwen/Qwen3-0.6B"):
         model_name: Название модели для загрузки
     """
     
-    print(f"🔥 Загрузка модели: {model_name}")
+    logger.info(f"Загрузка модели: {model_name}")
     
     try:
         # Загружаем токенизатор
-        print("📝 Загрузка токенизатора...")
+        logger.info("Загрузка токенизатора...")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         
         # Устанавливаем pad_token если его нет
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-            print("⚠️ Установлен pad_token = eos_token")
+            logger.warning("Установлен pad_token = eos_token")
         
-        print("✅ Токенизатор загружен")
+        logger.info("Токенизатор загружен")
         
         # Загружаем модель
-        print("🤖 Загрузка модели...")
+        logger.info("Загрузка модели...")
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
-        print("✅ Модель загружена")
+        logger.info("Модель загружена")
         
         # Определяем устройство
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"💻 Устройство: {device}")
+        logger.info(f"Устройство: {device}")
         
         model = model.to(device)
-        print(f"✅ Модель перенесена на {device}")
+        logger.info(f"Модель перенесена на {device}")
         
         return model, tokenizer
         
     except Exception as e:
-        print(f"❌ Ошибка при загрузке модели: {e}")
+        logger.error(f"Ошибка при загрузке модели: {e}", exc_info=True)
         raise
 
 def setup_lora_model(model, lora_params: Dict[str, Any]):
@@ -161,27 +164,27 @@ class LoRATuner:
             data_path: Путь к файлу с данными
             model_name: Название модели для загрузки
         """
-        print(f"📖 Загрузка данных из {data_path}...")
+        logger.info(f"Загрузка данных из {data_path}...")
         
         try:
             with open(data_path, 'r', encoding='utf-8') as f:
                 data = [json.loads(line) for line in f]
             
-            print(f"✅ Загружено {len(data)} примеров из {data_path}")
+            logger.info(f"Загружено {len(data)} примеров из {data_path}")
             
             # Загружаем модель и токенизатор
-            print("🤖 Загрузка модели и токенизатора...")
+            logger.info("Загрузка модели и токенизатора...")
             model_to_use = model_name or self.config.model_name
             self.model, self.tokenizer = load_model(model_to_use)
-            print("✅ Модель и токенизатор загружены")
+            logger.info("Модель и токенизатор загружены")
             
             # Подготавливаем датасет
-            print("📊 Подготовка датасета...")
+            logger.info("Подготовка датасета...")
             self.dataset = prepare_dataset(data, self.tokenizer)
-            print("✅ Датасет подготовлен")
+            logger.info("Датасет подготовлен")
             
         except Exception as e:
-            print(f"❌ Ошибка при загрузке данных: {e}")
+            logger.error(f"Ошибка при загрузке данных: {e}", exc_info=True)
             raise
         
     def objective_function(self, trial) -> float:
@@ -206,11 +209,11 @@ class LoRATuner:
                 import random
                 score = random.uniform(0.7, 0.95)
                 
-                print(f"Trial {trial.number}: params={lora_params}, score={score:.4f}")
+                logger.info(f"Trial {trial.number}: params={lora_params}, score={score:.4f}")
                 return score
                 
             except Exception as e:
-                print(f"Ошибка в trial {trial.number}: {e}")
+                logger.error(f"Ошибка в trial {trial.number}: {e}", exc_info=True)
                 return 0.0
             finally:
                 # Освобождаем память CUDA после каждого trial
@@ -225,13 +228,13 @@ class LoRATuner:
             output_dir: Директория для сохранения результатов
             model_name: Название модели для загрузки
         """
-        print("Начинаем дообучение LoRA с байесовской оптимизацией...")
+        logger.info("Начинаем дообучение LoRA с байесовской оптимизацией...")
         
         # Загружаем данные
         self.load_data(data_path, model_name)
         
         # Запускаем байесовскую оптимизацию
-        print(f"Запускаем оптимизацию на {self.config.n_trials} попыток...")
+        logger.info(f"Запускаем оптимизацию на {self.config.n_trials} попыток...")
         best_params = self.optimizer.optimize(self.objective_function)
         
         # Проверяем, что параметры были найдены
@@ -241,13 +244,13 @@ class LoRATuner:
                 "Возможно, все попытки завершились с ошибкой."
             )
             
-        print(f"Лучшие параметры: {best_params}")
+        logger.info(f"Лучшие параметры: {best_params}")
         
         # Создаем выходную директорию
         os.makedirs(output_dir, exist_ok=True)
         
         # Обучаем финальную модель с лучшими параметрами
-        print("Обучаем финальную модель с лучшими параметрами...")
+        logger.info("Обучаем финальную модель с лучшими параметрами...")
         final_model = fine_tune_lora(
             self.model,
             self.tokenizer,
@@ -266,7 +269,7 @@ class LoRATuner:
         with open(os.path.join(output_dir, 'optimization_results.json'), 'w') as f:
             json.dump(results, f, indent=2)
         
-        print(f"Дообучение завершено! Результаты сохранены в {output_dir}")
+        logger.info(f"Дообучение завершено! Результаты сохранены в {output_dir}")
         return results
 
 
@@ -276,9 +279,14 @@ if __name__ == "__main__":
     import sys
     import traceback
     
-    print("🚀 Запуск дообучения LoRA...")
-    print(f"Python версия: {sys.version}")
-    print(f"Аргументы командной строки: {sys.argv}")
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    logger.info("Запуск дообучения LoRA...")
+    logger.info(f"Python версия: {sys.version}")
+    logger.info(f"Аргументы командной строки: {sys.argv}")
     
     try:
         parser = argparse.ArgumentParser(description="Запуск дообучения LoRA с байесовской оптимизацией")
@@ -296,46 +304,43 @@ if __name__ == "__main__":
                                 "HuggingFaceH4/zephyr-7b-beta. "
                                 "По умолчанию: Qwen/Qwen3-0.6B")
         
-        print("📋 Парсинг аргументов...")
+        logger.info("Парсинг аргументов...")
         args = parser.parse_args()
-        print(f"✅ Аргументы получены: data={args.data}, output={args.output}, trials={args.trials}, model={args.model}")
+        logger.info(f"Аргументы получены: data={args.data}, output={args.output}, trials={args.trials}, model={args.model}")
         
         # Проверяем существование файла
-        print(f"📂 Проверка файла данных: {args.data}")
+        logger.info(f"Проверка файла данных: {args.data}")
         if not os.path.exists(args.data):
-            print(f"❌ ОШИБКА: Файл {args.data} не найден!")
+            logger.error(f"Файл {args.data} не найден!")
             sys.exit(1)
         else:
-            print(f"✅ Файл найден: {args.data}")
+            logger.info(f"Файл найден: {args.data}")
         
         # Создаем конфигурацию
-        print("⚙️ Создание конфигурации...")
+        logger.info("Создание конфигурации...")
         config = LoRATuningConfig.from_env()
         config.n_trials = args.trials
-        print(f"✅ Конфигурация создана: trials={config.n_trials}")
+        logger.info(f"Конфигурация создана: trials={config.n_trials}")
         
         # Создаем и запускаем тюнер
-        print("🤖 Создание LoRATuner...")
+        logger.info("Создание LoRATuner...")
         tuner = LoRATuner(config)
-        print("✅ LoRATuner создан")
+        logger.info("LoRATuner создан")
         
-        print("🎯 Запуск оптимизации...")
+        logger.info("Запуск оптимизации...")
         results = tuner.run_optimization(args.data, args.output, args.model)
         
-        print("✅ Дообучение LoRA успешно завершено!")
-        print(f"📊 Лучшие параметры: {results['best_params']}")
-        print(f"📁 Результаты сохранены в: {results['output_dir']}")
+        logger.info("Дообучение LoRA успешно завершено!")
+        logger.info(f"Лучшие параметры: {results['best_params']}")
+        logger.info(f"Результаты сохранены в: {results['output_dir']}")
         
     except KeyboardInterrupt:
-        print("\n⚠️ Прервано пользователем")
+        logger.warning("Прервано пользователем")
         sys.exit(1)
     except ImportError as e:
-        print(f"❌ Ошибка импорта: {e}")
-        print("💡 Возможно, не установлены необходимые зависимости")
-        traceback.print_exc()
+        logger.error(f"Ошибка импорта: {e}", exc_info=True)
+        logger.error("Возможно, не установлены необходимые зависимости")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Неожиданная ошибка: {e}")
-        print("🔍 Полная трассировка:")
-        traceback.print_exc()
+        logger.error(f"Неожиданная ошибка: {e}", exc_info=True)
         sys.exit(1) 
