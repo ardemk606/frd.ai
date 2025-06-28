@@ -7,6 +7,7 @@ from io import BytesIO
 from typing import List, Optional, Union, Dict, Any
 from minio import Minio
 from minio.error import S3Error
+import tempfile
 
 from .models import (
     MinIOConfig, ObjectInfo, UploadResult, DownloadResult, ContentType,
@@ -270,6 +271,43 @@ class MinIOClient:
             error_msg = f"Ошибка при парсинге JSONL превью {object_name}: {str(e)}"
             logger.error(error_msg)
             raise DownloadError(error_msg) from e
+    
+    def download_object_to_temp_file(self, object_name: str) -> str:
+        """
+        Скачивает объект из MinIO во временный файл.
+
+        Args:
+            object_name: Имя объекта для скачивания.
+
+        Returns:
+            Путь к временному файлу.
+            
+        Raises:
+            ObjectNotFoundError: Если объект не найден.
+            DownloadError: При ошибке скачивания.
+        """
+        try:
+            response = self._client.get_object(self.config.bucket_name, object_name)
+            
+            # Создаем временный файл, который не будет удален после закрытия
+            with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tmp_file:
+                for data_chunk in response.stream(32 * 1024):
+                    tmp_file.write(data_chunk)
+                file_path = tmp_file.name
+
+            response.close()
+            response.release_conn()
+
+            logger.info(f"Объект {object_name} скачан во временный файл: {file_path}")
+            return file_path
+
+        except S3Error as e:
+            if e.code == 'NoSuchKey':
+                raise ObjectNotFoundError(f"Объект не найден: {object_name}") from e
+            else:
+                raise DownloadError(f"Ошибка S3 при скачивании {object_name}: {e}") from e
+        except Exception as e:
+            raise DownloadError(f"Неожиданная ошибка при скачивании {object_name}: {e}") from e
     
     def list_objects(self, prefix: str = "") -> List[ObjectInfo]:
         """

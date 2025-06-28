@@ -137,6 +137,25 @@ class DatasetService:
             logger.error(f"Ошибка загрузки полного датасета {object_name}: {e}")
             raise DownloadError(f"Не удалось загрузить датасет: {str(e)}") from e
 
+    def download_dataset_to_temp_file(self, object_name: str) -> str:
+        """
+        Скачивает датасет из MinIO во временный файл и возвращает путь.
+
+        Args:
+            object_name: Имя объекта датасета в MinIO.
+
+        Returns:
+            Путь к локальному временному файлу с датасетом.
+        """
+        try:
+            logger.info(f"Скачивание датасета {object_name} во временный файл...")
+            file_path = self.client.download_object_to_temp_file(object_name)
+            logger.info(f"Датасет {object_name} успешно скачан в {file_path}")
+            return file_path
+        except (ObjectNotFoundError, DownloadError) as e:
+            logger.error(f"Не удалось скачать датасет {object_name}: {e}")
+            raise
+
 
 class PromptService:
     """Сервис для работы с системными промптами"""

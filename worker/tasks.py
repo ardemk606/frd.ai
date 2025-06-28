@@ -56,84 +56,82 @@ def generate_dataset_task(self, generation_params):
 
 
 @celery_app.task(bind=True, name='tasks.fine_tune_lora_task')
-def fine_tune_lora_task(self, fine_tuning_params):
+def fine_tune_lora_task(self, dataset_id: int, output_dir: str = None, model_name: str = None):
     """
-    Задача LoRA дообучения
+    Задача LoRA дообучения с байесовской оптимизацией.
+    
+    Находит лучшие гиперпараметры, обучает модель и сохраняет адаптер.
     
     Args:
-        fine_tuning_params: Параметры дообучения
-            - dataset_id: ID датасета
-            - rank: Rank LoRA [8, 16, 32, 64]
-            - lora_alpha: Alpha LoRA (2*rank)
-            - learning_rate: Learning rate [1e-5, 5e-4]
-            - lora_dropout: Dropout [0.0, 0.15]
+        dataset_id: ID датасета для дообучения.
+        output_dir: Директория для сохранения результатов.
+        model_name: Название модели для дообучения.
     """
+    dataset_path = None
     try:
-        dataset_id = fine_tuning_params.get('dataset_id')
-        logger.info(f"Начинаю LoRA дообучение для датасета {dataset_id}")
+        # Защита от передачи параметра в виде словаря
+        if isinstance(dataset_id, dict):
+            dataset_id = dataset_id.get('dataset_id')
+
+        logger.info(f"Начинаю LoRA дообучение для датасета id={dataset_id}")
+        self.update_state(state='PROGRESS', meta={'status': 'Получение данных...'})
+
+        # Шаг 1: Получаем имя объекта датасета из БД
+        # Используем фабрику для создания репозитория
+        from shared.repository.dependencies import create_dataset_repository
+        repo = create_dataset_repository()
+        dataset_record = repo.get_by_id(dataset_id)
         
-        # Обновляем статус задачи
-        current_task.update_state(
-            state='PROGRESS',
-            meta={'current': 0, 'total': 100, 'status': 'Загрузка модели...'}
-        )
+        if not dataset_record or not dataset_record.object_name:
+            raise FileNotFoundError(f"Запись о датасете {dataset_id} не найдена или не содержит имени файла.")
         
-        # Загружаем конфигурацию
-        config = LoRATuningConfig.from_env()
-        
-        # Подготавливаем параметры LoRA
-        lora_params = {
-            'rank': fine_tuning_params['rank'],
-            'lora_alpha': fine_tuning_params['lora_alpha'], 
-            'learning_rate': fine_tuning_params['learning_rate'],
-            'lora_dropout': fine_tuning_params['lora_dropout']
-        }
-        
-        # Загружаем модель
-        model, tokenizer = load_model()
-        
-        current_task.update_state(
-            state='PROGRESS',
-            meta={'current': 20, 'total': 100, 'status': 'Подготовка данных...'}
-        )
-        
-        # Загружаем и подготавливаем датасет
+        dataset_object_name = dataset_record.object_name
+        logger.info(f"Объект в MinIO для датасета {dataset_id}: {dataset_object_name}")
+
+        # Шаг 2: Скачиваем датасет из MinIO во временный файл
+        from shared.minio.dependencies import get_minio_client
         from shared.minio.services import DatasetService
-        dataset_service = DatasetService()
-        data = dataset_service.get_full_dataset(dataset_id)
         
-        dataset = prepare_dataset(data, tokenizer)
+        minio_client = get_minio_client()
+        dataset_service = DatasetService(minio_client)
+        dataset_path = dataset_service.download_dataset_to_temp_file(dataset_object_name)
+
+        # Шаг 3: Запускаем дообучение
+        from lora.lora_tuning import LoRATuner, LoRATuningConfig
         
-        current_task.update_state(
-            state='PROGRESS',
-            meta={'current': 40, 'total': 100, 'status': 'Запуск дообучения...'}
+        config = LoRATuningConfig.from_env()
+        tuner = LoRATuner(config=config)
+        
+        final_output_dir = output_dir or f"/app/lora_results/{dataset_id}"
+        self.update_state(state='PROGRESS', meta={'status': f'Запуск оптимизации, результаты в {final_output_dir}'})
+        
+        results = tuner.run_optimization(
+            data_path=dataset_path,
+            output_dir=final_output_dir,
+            model_name=model_name
         )
         
-        # Запускаем дообучение
-        output_dir = f"/tmp/lora_output_{dataset_id}"
-        peft_model = fine_tune_lora(model, tokenizer, dataset, lora_params, output_dir)
+        logger.info(f"LoRA дообучение успешно завершено для датасета {dataset_id}.")
+        self.update_state(state='SUCCESS', meta=results)
         
-        current_task.update_state(
-            state='PROGRESS',
-            meta={'current': 90, 'total': 100, 'status': 'Сохранение результатов...'}
-        )
-        
-        logger.info(f"LoRA дообучение завершено для датасета {dataset_id}")
-        
-        return {
-            'status': 'SUCCESS',
-            'dataset_id': dataset_id,
-            'lora_params': lora_params,
-            'output_dir': output_dir
-        }
+        return results
         
     except Exception as exc:
-        logger.error(f"Ошибка LoRA дообучения: {exc}")
-        current_task.update_state(
+        logger.error(f"Ошибка LoRA дообучения для датасета {dataset_id}: {exc}", exc_info=True)
+        self.update_state(
             state='FAILURE',
-            meta={'error': str(exc)}
+            meta={'error_type': type(exc).__name__, 'error_message': str(exc)}
         )
         raise exc
+    finally:
+        # Шаг 4: Гарантированно удаляем временный файл
+        if dataset_path:
+            import os
+            try:
+                os.unlink(dataset_path)
+                logger.info(f"Временный файл {dataset_path} удален.")
+            except OSError as e:
+                logger.error(f"Не удалось удалить временный файл {dataset_path}: {e}")
 
 
 @celery_app.task(bind=True, name='tasks.validate_dataset_task')

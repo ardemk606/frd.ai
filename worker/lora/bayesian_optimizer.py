@@ -30,7 +30,12 @@ class BayesianOptimizer:
         self.study.optimize(objective_function, n_trials=self.n_trials)
         
         # Получаем лучшие параметры и добавляем lora_alpha
-        best_params = self.study.best_params.copy()
+        try:
+            best_params = self.study.best_params.copy()
+        except ValueError:
+            # Если лучшие параметры не найдены (например, все trials провалились)
+            best_params = {}
+            
         if 'rank' in best_params:
             best_params['lora_alpha'] = 2 * best_params['rank']
         

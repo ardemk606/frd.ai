@@ -20,7 +20,7 @@ except ImportError:
     from lora.lora_tuning_config import LoRATuningConfig
 
 
-def load_model(model_name: str = "mistralai/Mistral-7B-Instruct-v0.3"):
+def load_model(model_name: str = "Qwen/Qwen3-0.6B"):
     """Загружает модель
     
     Args:
@@ -120,6 +120,7 @@ def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], outpu
         remove_unused_columns=False,
         dataloader_drop_last=True,  # Избегаем проблем с разными размерами батчей
         fp16=True,  # Используем mixed precision для экономии памяти
+        label_names=["labels"],  # Явно указываем колонку с ответами
     )
     
     # Создаем тренер
@@ -211,6 +212,10 @@ class LoRATuner:
             except Exception as e:
                 print(f"Ошибка в trial {trial.number}: {e}")
                 return 0.0
+            finally:
+                # Освобождаем память CUDA после каждого trial
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
     
     def run_optimization(self, data_path: str, output_dir: str = "./lora_results", model_name: str = None) -> Dict[str, Any]:
         """Запускает полный цикл оптимизации и дообучения
@@ -229,6 +234,13 @@ class LoRATuner:
         print(f"Запускаем оптимизацию на {self.config.n_trials} попыток...")
         best_params = self.optimizer.optimize(self.objective_function)
         
+        # Проверяем, что параметры были найдены
+        if not best_params:
+            raise RuntimeError(
+                "Байесовская оптимизация не нашла лучших параметров. "
+                "Возможно, все попытки завершились с ошибкой."
+            )
+            
         print(f"Лучшие параметры: {best_params}")
         
         # Создаем выходную директорию
@@ -276,13 +288,13 @@ if __name__ == "__main__":
                            help="Директория для сохранения результатов")
         parser.add_argument("--trials", type=int, default=5,
                            help="Количество попыток байесовской оптимизации")
-        parser.add_argument("--model", type=str, default="mistralai/Mistral-7B-Instruct-v0.3",
+        parser.add_argument("--model", type=str, default="Qwen/Qwen3-0.6B",
                            help="Название модели для дообучения. Популярные варианты: "
-                                "mistralai/Mistral-7B-Instruct-v0.3, "
+                                "Qwen/Qwen3-0.6B, "
                                 "microsoft/DialoGPT-medium, "
                                 "meta-llama/Llama-2-7b-chat-hf, "
                                 "HuggingFaceH4/zephyr-7b-beta. "
-                                "По умолчанию: mistralai/Mistral-7B-Instruct-v0.3")
+                                "По умолчанию: Qwen/Qwen3-0.6B")
         
         print("📋 Парсинг аргументов...")
         args = parser.parse_args()
