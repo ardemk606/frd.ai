@@ -115,5 +115,6 @@ graph TD
 -   [`/shared`](./shared/README.md): Общий код, используемый `src` и `worker` (репозитории, клиенты и т.д.).
 -   [`/frontend`](./frontend/README.md): Streamlit-приложение для взаимодействия с платформой.
 -   [`/data`](./data/prompt/README.md): Шаблоны промптов и другие данные.
+-   [`/deployment`](./deployment/README.md): HelmChart, ArgoCD манифесты для деплоя приложения в k8s.
 -   `docker-compose.yml`: Определяет все сервисы, их взаимодействие и переменные окружения.
 -   `Dockerfile`: Инструкции для сборки Docker-образа основного API.
