@@ -69,7 +69,9 @@ services:
 
   # FastAPI Application
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: src/Dockerfile
     container_name: data-generation-api
     ports:
       - "7777:7777"
@@ -115,7 +117,10 @@ services:
   cpu-worker:
     build:
       context: .
-      dockerfile: ./worker/Dockerfile
+      dockerfile: ./worker/Dockerfile.uv
+      # Кеширование для быстрой пересборки
+      cache_from:
+        - python:3.11-slim
     container_name: data-generation-cpu-worker
     environment:
       # MinIO Settings
@@ -163,12 +168,19 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+    volumes:
+      - ./worker:/app
+      - ./shared:/app/shared
+      - ./data:/app/data
 
   # Celery GPU Worker
   gpu-worker:
     build:
       context: .
       dockerfile: ./worker/Dockerfile
+      # Кеширование для быстрой пересборки
+      cache_from:
+        - python:3.11-slim
     container_name: data-generation-gpu-worker
     environment:
       # MinIO Settings
@@ -216,6 +228,10 @@ services:
         condition: service_healthy
       minio-setup:
         condition: service_completed_successfully
+    volumes:
+      - ./worker:/app
+      - ./shared:/app/shared
+      - ./data:/app/data
 
   # Streamlit Frontend
   frontend:
