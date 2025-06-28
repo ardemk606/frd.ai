@@ -69,7 +69,9 @@ services:
 
   # FastAPI Application
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: src/Dockerfile
     container_name: data-generation-api
     ports:
       - "7777:7777"
