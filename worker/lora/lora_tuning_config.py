@@ -8,7 +8,7 @@ class LoRATuningConfig:
     """Конфигурация для LoRA дообучения"""
     
     # Параметры модели
-    model_name: str = "mistralai/Mistral-7B-Instruct-v0.1"
+    model_name: str = "Qwen/Qwen3-0.6B"
     max_length: int = 512
     
     # Параметры обучения
@@ -36,7 +36,7 @@ class LoRATuningConfig:
         load_dotenv()
         
         return cls(
-            model_name=os.getenv("LORA_MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.1"),
+            model_name=os.getenv("LORA_MODEL_NAME", "Qwen/Qwen3-0.6B"),
             max_length=int(os.getenv("LORA_MAX_LENGTH", "512")),
             num_train_epochs=int(os.getenv("LORA_NUM_EPOCHS", "3")),
             per_device_train_batch_size=int(os.getenv("LORA_BATCH_SIZE", "4")),

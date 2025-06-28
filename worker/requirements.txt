@@ -9,6 +9,9 @@ accelerate
 numpy
 scipy
 evaluate
+optuna
+protobuf
+sentencepiece
 
 # =============================================================================
 # МЕТРИКИ И ЭВАЛУАЦИЯ

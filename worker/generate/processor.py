@@ -134,7 +134,7 @@ def main():
         processor = SelfInstructProcessor(config, dataset.system_prompt_object_name)
         # Для отладки используем проект ID = 1
         output_file = processor.process_all(project_id=1)
-        print(f"Результаты сохранены в файл: {output_file}")
+        logger.info(f"Результаты сохранены в файл: {output_file}")
     except Exception as e:
         logger.error(f"Критическая ошибка выполнения: {e}", exc_info=True)
         raise
