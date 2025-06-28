@@ -155,3 +155,5 @@ instance/
 
 # Pydantic specific
 *.pyd
+
+ssh/
