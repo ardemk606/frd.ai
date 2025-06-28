@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "debug-chart.fullname" . }}-html
+  labels:
+    {{- include "debug-chart.labels" . | nindent 4 }}
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Welcome to frd.ai!</title>
+    <style>
+      body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+        background-color: #282c34;
+        color: #abb2bf;
+      }
+    </style>
+    </head>
+    <body>
+    <h1>Hello from frd.ai!</h1>
+    <p>This page is served by nginx via a Helm chart deployed with ArgoCD.</p>
+    <p>This is a successful GitOps deployment!</p>
+    </body>
+    </html> 

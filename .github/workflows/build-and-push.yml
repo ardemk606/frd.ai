@@ -1,0 +1,79 @@
+name: CI - Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'worker/**'
+      - 'frontend/**'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Определяем наши приложения
+        app:
+          - name: api
+            path: ./src
+            dockerfile: ./src/Dockerfile
+          - name: frontend
+            path: ./frontend
+            dockerfile: ./frontend/Dockerfile
+          - name: worker
+            path: ./worker
+            dockerfile: ./worker/Dockerfile.uv
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Шаг 1: Проверяем, изменились ли файлы для этого приложения
+      - name: Check for changes in app directory
+        uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            app:
+              - '{{ matrix.app.path }}/**'
+
+      # Шаг 2: Если изменения есть, собираем и пушим
+      - name: Login to GitHub Container Registry
+        if: steps.filter.outputs.app == 'true'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: steps.filter.outputs.app == 'true'
+        id: build
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ${{ matrix.app.dockerfile }}
+          push: true
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.app.name }}:${{ github.sha }}
+
+      # Шаг 3: Обновляем Helm Chart
+      - name: Update Helm chart values
+        if: steps.filter.outputs.app == 'true'
+        run: |
+          # Устанавливаем yq для редактирования YAML
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+          
+          # Путь к values.yaml соответствующего чарта
+          CHART_VALUES_FILE="deployment/app-charts/frd-ai-${{ matrix.app.name }}/values.yaml"
+          
+          # Обновляем тег
+          yq -i '.image.tag = "${{ github.sha }}"' $CHART_VALUES_FILE
+          
+          # Коммитим изменения
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add $CHART_VALUES_FILE
+          git commit -m "ci: Update image tag for ${{ matrix.app.name }} to ${{ github.sha }}"
+          git push

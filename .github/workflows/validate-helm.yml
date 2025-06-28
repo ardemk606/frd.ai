@@ -1,0 +1,28 @@
+name: CD - Validate Helm Charts
+
+on:
+  pull_request:
+    paths:
+      - 'deployment/**'
+
+jobs:
+  validate-helm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+
+      - name: Lint and Template Helm Charts
+        run: |
+          # Находим все измененные чарты
+          # (логика определения измененных чартов может быть сложнее,
+          # но для начала можно проверять все)
+          for chart in deployment/app-charts/*/; do
+            echo "Linting $chart"
+            helm lint $chart
+            echo "Templating $chart"
+            helm template $chart > /dev/null
+          done

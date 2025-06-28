@@ -1,0 +1,55 @@
+# ArgoCD и Helm временные файлы
+*.tgz
+charts/*/charts/
+charts/*/requirements.lock
+
+# Helm зависимости
+Chart.lock
+charts/
+
+# ArgoCD временные файлы
+.argocd/
+*.tmp
+
+# Kubernetes секреты и конфиденциальная информация
+secrets/
+*.key
+*.crt
+*.pem
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS файлы
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+
+# Временные файлы
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Файлы окружения
+.env
+.env.local
+.env.*.local
+
+# Кеш и зависимости
+node_modules/
+.npm
+.yarn/
+
+# Файлы сборки
+dist/
+build/
+target/
+
+.cursor/

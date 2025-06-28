@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-bucket-setup-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    # This is what defines this resource as a hook.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ .Release.Name }}-bucket-setup
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: minio-mc
+        image: minio/mc:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for MinIO to be ready...";
+          until /usr/bin/mc alias set myminio http://{{ .Release.Name }}:9000 {{ .Values.rootUser }} {{ .Values.rootPassword }}; do echo "Retrying..." && sleep 2; done;
+          echo "MinIO ready, creating buckets...";
+          /usr/bin/mc mb myminio/seed-dataset --ignore-existing;
+          /usr/bin/mc mb myminio/generated-dataset --ignore-existing;
+          /usr/bin/mc mb myminio/lora-adapters --ignore-existing;
+          echo "MinIO buckets created successfully!"; 
