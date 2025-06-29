@@ -10,7 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY shared/ ./shared/
 COPY data/ ./data/
-COPY mock/ ./mock/
 
 # Экспортируем порт
 EXPOSE 7777

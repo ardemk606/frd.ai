@@ -40,7 +40,6 @@ RUN mkdir -p shared data mock
 COPY worker/ .
 COPY shared/ ./shared/
 COPY data/ ./data/
-COPY mock/ ./mock/
 
 # Настройка прав доступа
 RUN chmod +x start.sh
