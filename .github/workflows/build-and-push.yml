@@ -153,4 +153,5 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add deployment/app-charts/*/values.yaml
           git commit -m "ci: Update image tags for${UPDATED_COMPONENTS} to ${{ github.sha }}"
+          git pull --rebase origin ${{ github.ref_name }}
           git push
