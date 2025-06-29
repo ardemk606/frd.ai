@@ -4,21 +4,18 @@
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
-
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: ghcr.io/ardemk606/frd.ai/worker
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
-
+  tag: "71b22ca7562d8bdd2b263da12454c33f17d4c6c6"
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
 nameOverride: ""
 fullnameOverride: ""
-
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
   # Specifies whether a service account should be created
@@ -30,36 +27,34 @@ serviceAccount:
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
-
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
-
 podSecurityContext: {}
-  # fsGroup: 2000
+# fsGroup: 2000
 
 securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+# capabilities:
+#   drop:
+#   - ALL
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
 
 resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# We usually recommend not to specify default resources and to leave this as a conscious
+# choice for the user. This also increases chances charts run on environments with little
+# resources, such as Minikube. If you do want to specify resources, uncomment the following
+# lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+# limits:
+#   cpu: 100m
+#   memory: 128Mi
+# requests:
+#   cpu: 100m
+#   memory: 128Mi
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -68,7 +63,6 @@ autoscaling:
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
-
 # Additional volumes on the output Deployment definition.
 volumes: []
 # - name: foo
@@ -83,11 +77,8 @@ volumeMounts: []
 #   readOnly: true
 
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
-
 # Глобальная конфигурация воркеров
 worker:
   cpu:
@@ -99,7 +90,6 @@ worker:
     replicas: 1
     queues: "gpu_queue"
     nodeSelector: {}
-
 # Общая конфигурация (неконфиденциальная)
 config:
   minio:
@@ -126,6 +116,5 @@ config:
     evalSteps: "500"
     warmupSteps: "100"
     nTrials: "20"
-
 # Имя существующего секрета с конфиденциальными данными
 existingSecretName: "frd-ai-worker-secrets"
