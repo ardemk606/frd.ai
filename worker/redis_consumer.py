@@ -2,7 +2,7 @@
 Redis Consumer для чтения задач из Redis и передачи их в Celery
 """
 import json
-import logging
+from shared.logging_config import get_logger
 import time
 import os
 from typing import Optional, Dict, Any
@@ -16,7 +16,7 @@ except ImportError:
 from celery_app import celery_app
 from tasks import generate_dataset_task
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -142,10 +142,6 @@ class RedisTaskConsumer:
 
 def main():
     """Основная функция Redis consumer"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
     
     try:
         config = RedisConfig.from_env()

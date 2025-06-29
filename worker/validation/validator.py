@@ -2,7 +2,7 @@
 Валидатор датасетов с метриками качества
 """
 import json
-import logging
+from shared.logging_config import get_logger
 from typing import Dict, List, Any, Tuple
 from collections import Counter
 import re
@@ -26,7 +26,7 @@ from shared.repository import (
 )
 from shared.minio.models import JSONLUploadRequest, TextUploadRequest
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Загружаем NLTK данные если нужно
 try:

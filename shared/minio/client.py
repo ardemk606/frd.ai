@@ -2,7 +2,7 @@
 Основной клиент для работы с MinIO
 """
 import json
-import logging
+from shared.logging_config import get_logger
 from io import BytesIO
 from typing import List, Optional, Union, Dict, Any
 from minio import Minio
@@ -18,7 +18,7 @@ from .exceptions import (
     DownloadError, BucketError, ValidationError
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MinIOClient:

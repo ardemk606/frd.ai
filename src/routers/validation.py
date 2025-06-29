@@ -1,7 +1,7 @@
 """
 Роутер для валидации датасетов
 """
-import logging
+from shared.logging_config import get_logger
 from fastapi import APIRouter, HTTPException, Depends
 
 from ..dependencies import get_dataset_repository, get_dataset_status_service
@@ -13,7 +13,7 @@ from shared.repository import (
     ValidationError
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/dataset",

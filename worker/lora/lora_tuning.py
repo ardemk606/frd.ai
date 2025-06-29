@@ -9,7 +9,7 @@ from peft import LoraConfig, get_peft_model, TaskType
 from typing import Dict, Any, List
 import json
 import tempfile
-import logging
+from shared.logging_config import get_logger
 
 # Импорты из того же пакета
 try:
@@ -20,7 +20,7 @@ except ImportError:
     from lora.bayesian_optimizer import BayesianOptimizer
     from lora.lora_tuning_config import LoRATuningConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def load_model(model_name: str = "Qwen/Qwen3-0.6B"):
@@ -279,10 +279,7 @@ if __name__ == "__main__":
     import sys
     import traceback
     
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+
     
     logger.info("Запуск дообучения LoRA...")
     logger.info(f"Python версия: {sys.version}")

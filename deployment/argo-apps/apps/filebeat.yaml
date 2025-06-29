@@ -1,0 +1,113 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: filebeat
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.elastic.co
+    chart: filebeat
+    targetRevision: 8.5.1
+    helm:
+      values: |
+        # DaemonSet для сбора логов со всех нод
+        daemonset:
+          enabled: true
+
+        # Отключаем deployment
+        deployment:
+          enabled: false
+
+        # Ресурсы
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "1000m"
+            memory: "200Mi"
+
+        # Конфигурация Filebeat
+        filebeatConfig:
+          filebeat.yml: |
+            filebeat.inputs:
+            - type: container
+              paths:
+                - /var/log/containers/*.log
+              processors:
+              - add_kubernetes_metadata:
+                  host: ${NODE_NAME}
+                  matchers:
+                  - logs_path:
+                      logs_path: "/var/log/containers/"
+              # Фильтруем только наши приложения
+              - drop_event:
+                  when:
+                    not:
+                      or:
+                        - contains:
+                            kubernetes.labels.app: "frd-ai-api"
+                        - contains:
+                            kubernetes.labels.app: "frd-ai-frontend" 
+                        - contains:
+                            kubernetes.labels.app: "frd-ai-worker"
+            
+            output.elasticsearch:
+              host: '${NODE_NAME}'
+              hosts: '["http://elasticsearch-master.elk.svc.cluster.local:9200"]'
+              index: "frd-ai-logs-%{+yyyy.MM.dd}"
+            
+            setup.template.name: "frd-ai-logs"
+            setup.template.pattern: "frd-ai-logs-*"
+            setup.ilm.enabled: false
+
+        # Переменные окружения
+        extraEnvs:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+
+        # Монтируем логи контейнеров
+        extraVolumes:
+          - name: varlibdockercontainers
+            hostPath:
+              path: /var/lib/docker/containers
+          - name: varlog
+            hostPath:
+              path: /var/log
+
+        extraVolumeMounts:
+          - name: varlibdockercontainers
+            mountPath: /var/lib/docker/containers
+            readOnly: true
+          - name: varlog
+            mountPath: /var/log
+            readOnly: true
+
+        # Права доступа
+        serviceAccount:
+          create: true
+
+        clusterRoleRules:
+          - apiGroups: [""]
+            resources:
+              - nodes
+              - namespaces
+              - events
+              - pods
+            verbs: ["get", "list", "watch"]
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: elk
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

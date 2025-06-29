@@ -1,13 +1,13 @@
 """
 Сервис для управления статусами датасетов
 """
-import logging
+from shared.logging_config import get_logger
 from typing import List, Tuple
 
 from .dataset_repository import DatasetRepository
 from .exceptions import ValidationError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DatasetStatusService:

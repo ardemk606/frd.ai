@@ -1,14 +1,14 @@
 """
 Celery задачи для генерации данных
 """
-import logging
+from shared.logging_config import get_logger
 from celery import current_task
 from celery_app import celery_app
 from generate.processor import DataProcessor
 from lora.lora_tuning import load_model, fine_tune_lora, prepare_dataset
 from lora.lora_tuning_config import LoRATuningConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @celery_app.task(bind=True, name='tasks.generate_dataset_task')
 def generate_dataset_task(self, generation_params):

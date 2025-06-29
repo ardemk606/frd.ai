@@ -1,7 +1,7 @@
 """
 Специализированные сервисы для работы с MinIO
 """
-import logging
+from shared.logging_config import get_logger
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, BinaryIO, Union
 from io import BytesIO
@@ -13,7 +13,7 @@ from .models import (
 )
 from .exceptions import UploadError, DownloadError, ObjectNotFoundError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DatasetService:

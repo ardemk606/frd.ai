@@ -9,3 +9,4 @@ fastapi
 python-multipart
 redis
 celery
+python-json-logger==2.0.7

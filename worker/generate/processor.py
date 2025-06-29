@@ -1,4 +1,4 @@
-import logging
+from shared.logging_config import get_logger
 import concurrent.futures
 import math
 import random
@@ -24,7 +24,7 @@ from shared.repository import (
     RepositoryError
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SelfInstructProcessor:
@@ -124,7 +124,6 @@ class SelfInstructProcessor:
 
 def main():
     """Главная функция для запуска обработки"""
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     try:
         config = Config.from_env()

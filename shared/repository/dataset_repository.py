@@ -1,7 +1,7 @@
 """
 Репозиторий для работы с датасетами
 """
-import logging
+from shared.logging_config import get_logger
 from typing import List, Optional
 from datetime import datetime
 
@@ -9,7 +9,7 @@ from .base import BaseRepository
 from .models import Dataset, DatasetCreate, DatasetUpdate
 from .exceptions import DatasetNotFoundError, RepositoryError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DatasetRepository(BaseRepository):

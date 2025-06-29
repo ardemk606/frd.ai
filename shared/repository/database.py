@@ -2,13 +2,13 @@
 Подключение к базе данных PostgreSQL
 """
 import os
-import logging
+from shared.logging_config import get_logger
 from contextlib import contextmanager
 from typing import Generator
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DatabaseConnection:

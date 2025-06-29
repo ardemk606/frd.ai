@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kibana
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.elastic.co
+    chart: kibana
+    targetRevision: 8.5.1
+    helm:
+      values: |
+        # Подключение к Elasticsearch
+        elasticsearchHosts: "http://elasticsearch-master.elk.svc.cluster.local:9200"
+
+        # Ресурсы
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+
+        # Service
+        service:
+          type: ClusterIP
+          port: 5601
+
+        # Ingress для доступа к Kibana
+        ingress:
+          enabled: true
+          className: "traefik"
+          hosts:
+            - host: kibana.frd.local
+              paths:
+                - path: /
+                  pathType: Prefix
+
+        # Конфигурация
+        kibanaConfig:
+          kibana.yml: |
+            server.host: 0.0.0.0
+            elasticsearch.hosts: ["http://elasticsearch-master.elk.svc.cluster.local:9200"]
+            xpack.security.enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: elk
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,7 +1,7 @@
 """
 Роутер для загрузки датасетов
 """
-import logging
+from shared.logging_config import get_logger
 from datetime import datetime
 from io import BytesIO
 
@@ -21,7 +21,7 @@ from shared.minio import (
 )
 from ..services.storage import FastAPIStorageService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/upload",

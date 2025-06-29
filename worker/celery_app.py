@@ -3,6 +3,9 @@ Celery приложение для обработки задач генерац�
 """
 import os
 from celery import Celery
+from shared.logging_config import setup_json_logging, get_logger
+
+setup_json_logging("frd-ai-worker")
 
 # Настройки Celery
 celery_app = Celery(
@@ -12,7 +15,7 @@ celery_app = Celery(
     include=['tasks']
 )
 
-# Конфигурация Celery
+# Конфигурация Celery с JSON логированием
 celery_app.conf.update(
     task_serializer='json',
     accept_content=['json'],
@@ -20,9 +23,15 @@ celery_app.conf.update(
     timezone='UTC',
     enable_utc=True,
     task_track_started=True,
-    worker_log_format='[%(asctime)s: %(levelname)s/%(processName)s] %(message)s',
-    worker_task_log_format='[%(asctime)s: %(levelname)s/%(processName)s][%(task_name)s(%(task_id)s)] %(message)s',
+    # Отключаем стандартное форматирование - используем JSON
+    worker_hijack_root_logger=False,
+    worker_log_format='%(message)s',
+    worker_task_log_format='%(message)s',
 )
+
+# Логируем старт worker'а
+logger = get_logger(__name__)
+logger.info("Celery worker application initialized")
 
 if __name__ == '__main__':
     celery_app.start() 

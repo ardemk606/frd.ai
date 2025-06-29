@@ -1,4 +1,4 @@
-import logging
+from shared.logging_config import get_logger
 import os
 from typing import List, Dict, Any
 
@@ -6,7 +6,7 @@ from shared.llm.gemini.gemini_client import GeminiClient
 from shared.minio import MinIOClient
 from shared.minio.dependencies import get_minio_client
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ResponseGenerator:
