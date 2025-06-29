@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копирование приложения
-COPY app.py .
+COPY frontend/app.py .
 
 # Открываем порт для Streamlit
 EXPOSE 8501
