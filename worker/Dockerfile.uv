@@ -1,11 +1,14 @@
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
-# Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
+# Установка системных зависимостей с retry-логикой
+RUN apt-get clean && \
+    apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends --fix-missing \
     gcc \
     g++ \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Установка UV - ультра быстрого менеджера пакетов Python
 RUN pip install uv
@@ -15,7 +18,7 @@ WORKDIR /app
 # =============================================================================
 # STAGE 2: Кеширование Python зависимостей с UV
 # =============================================================================
-FROM base as dependencies
+FROM base AS dependencies
 
 COPY worker/requirements.txt ./requirements.txt
 
@@ -31,7 +34,7 @@ RUN grep -v "torch --index-url" requirements.txt > requirements_clean.txt && \
 # =============================================================================
 # STAGE 3: Финальный образ с кодом
 # =============================================================================
-FROM dependencies as final
+FROM dependencies AS final
 
 # Создаем структуру директорий
 RUN mkdir -p shared data mock
