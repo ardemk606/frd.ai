@@ -1,0 +1,32 @@
+{{- /*
+NOTES.txt for Worker
+*/ -}}
+The frd.ai Worker services have been deployed.
+
+{{- if .Values.worker.cpu.enabled }}
+CPU Worker is enabled with {{ .Values.worker.cpu.replicas }} replica(s).
+Queue: {{ .Values.worker.cpu.queues }}
+{{- end }}
+
+{{- if .Values.worker.gpu.enabled }}
+GPU Worker is enabled with {{ .Values.worker.gpu.replicas }} replica(s).
+Queue: {{ .Values.worker.gpu.queues }}
+{{- end }}
+
+You can check the status of the workers by running:
+{{- if .Values.worker.cpu.enabled }}
+kubectl get deployment {{ include "worker.fullname" . }}-cpu -n {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.worker.gpu.enabled }}
+kubectl get deployment {{ include "worker.fullname" . }}-gpu -n {{ .Release.Namespace }}
+{{- end }}
+
+To view worker logs:
+{{- if .Values.worker.cpu.enabled }}
+kubectl logs -l app.kubernetes.io/component=cpu-worker -n {{ .Release.Namespace }}
+{{- end }}
+{{- if .Values.worker.gpu.enabled }}
+kubectl logs -l app.kubernetes.io/component=gpu-worker -n {{ .Release.Namespace }}
+{{- end }}
+
+Enjoy!

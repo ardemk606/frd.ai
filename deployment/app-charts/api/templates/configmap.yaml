@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "api.fullname" . }}-config
+data:
+  # MinIO Settings
+  MINIO_ENDPOINT: {{ .Values.config.minio.endpoint | quote }}
+  MINIO_BUCKET: {{ .Values.config.minio.bucket | quote }}
+  MINIO_SECURE: {{ .Values.config.minio.secure | quote }}
+
+  # Database Settings
+  DB_HOST: {{ .Values.config.database.host | quote }}
+  DB_PORT: {{ .Values.config.database.port | quote }}
+  DB_NAME: {{ .Values.config.database.name | quote }}
+  DB_USER: {{ .Values.config.database.user | quote }}
+
+  # Redis Settings
+  REDIS_HOST: {{ .Values.config.redis.host | quote }}
+  REDIS_PORT: {{ .Values.config.redis.port | quote }}
+
+  # AI Settings (не секретные)
+  BATCH_SIZE: {{ .Values.config.ai.batchSize | quote }}
+  TOTAL_RESULTS: {{ .Values.config.ai.totalResults | quote }}
+  MAX_WORKERS: {{ .Values.config.ai.maxWorkers | quote }}
+  EXAMPLES_PER_API_CALL: {{ .Values.config.ai.examplesPerApiCall | quote }}

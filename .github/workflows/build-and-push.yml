@@ -5,9 +5,21 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'worker/**'
-      - 'frontend/**'
+      - "src/**"
+      - "worker/**"
+      - "frontend/**"
+  workflow_dispatch:
+    inputs:
+      components:
+        description: 'Which components to build (comma-separated: api,frontend,worker or "all")'
+        required: true
+        default: "all"
+        type: string
+      force_build:
+        description: "Force build even if no changes detected"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build-and-push:
@@ -30,18 +42,44 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Шаг 1: Проверяем, изменились ли файлы для этого приложения
-      - name: Check for changes in app directory
+      # Проверка для мануального запуска
+      - name: Check if component should be built (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        id: manual_check
+        run: |
+          COMPONENTS="${{ github.event.inputs.components }}"
+          FORCE_BUILD="${{ github.event.inputs.force_build }}"
+
+          if [[ "$COMPONENTS" == "all" ]] || [[ "$COMPONENTS" == *"${{ matrix.app.name }}"* ]]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "force_build=$FORCE_BUILD" >> $GITHUB_OUTPUT
+
+      # Проверка изменений для автоматического запуска
+      - name: Check for changes in app directory (automatic trigger)
+        if: github.event_name == 'push'
         uses: dorny/paths-filter@v2
         id: filter
         with:
           filters: |
             app:
-              - '{{ matrix.app.path }}/**'
+              - '${{ matrix.app.path }}/**'
 
-      # Шаг 2: Если изменения есть, собираем и пушим
+      # Определяем, нужно ли собирать
+      - name: Determine if build should proceed
+        id: build_decision
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_build=${{ steps.manual_check.outputs.should_build }}" >> $GITHUB_OUTPUT
+          else
+            echo "should_build=${{ steps.filter.outputs.app }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Login to GitHub Container Registry
-        if: steps.filter.outputs.app == 'true'
+        if: steps.build_decision.outputs.should_build == 'true'
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
@@ -49,7 +87,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        if: steps.filter.outputs.app == 'true'
+        if: steps.build_decision.outputs.should_build == 'true'
         id: build
         uses: docker/build-push-action@v4
         with:
@@ -58,19 +96,18 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}/${{ matrix.app.name }}:${{ github.sha }}
 
-      # Шаг 3: Обновляем Helm Chart
       - name: Update Helm chart values
-        if: steps.filter.outputs.app == 'true'
+        if: steps.build_decision.outputs.should_build == 'true'
         run: |
           # Устанавливаем yq для редактирования YAML
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          
+
           # Путь к values.yaml соответствующего чарта
-          CHART_VALUES_FILE="deployment/app-charts/frd-ai-${{ matrix.app.name }}/values.yaml"
-          
+          CHART_VALUES_FILE="deployment/app-charts/${{ matrix.app.name }}/values.yaml"
+
           # Обновляем тег
           yq -i '.image.tag = "${{ github.sha }}"' $CHART_VALUES_FILE
-          
+
           # Коммитим изменения
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'

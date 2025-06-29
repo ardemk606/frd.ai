@@ -1,0 +1,18 @@
+{{- /*
+NOTES.txt
+*/ -}}
+{{- define "api.notes" -}}
+The frd.ai API service has been deployed.
+
+{{- if .Values.ingress.enabled }}
+To access the API, use the following host:
+http://{{- .Values.ingress.hosts | first | get "host" -}}
+{{- else }}
+The API is not exposed externally via Ingress.
+You can access it within the cluster at:
+http://{{ include "api.fullname" . }}:{{ .Values.service.port }}
+{{- end }}
+
+You can get the status of the deployment by running:
+kubectl get deployment {{ include "api.fullname" . }} -n {{ .Release.Namespace }}
+{{- end -}}
