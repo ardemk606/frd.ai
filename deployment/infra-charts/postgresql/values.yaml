@@ -356,7 +356,38 @@ primary:
     ##      #!/bin/sh
     ##      echo "Do something."
     ##
-    scripts: {}
+    scripts:
+      01_create_tables.sql: |
+        -- Таблица для LoRA адаптеров
+        CREATE TABLE IF NOT EXISTS lora_adapter (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            object_name VARCHAR(500) NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Таблица для задач
+        CREATE TABLE IF NOT EXISTS task (
+            id SERIAL PRIMARY KEY,
+            status VARCHAR(50) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP NULL
+        );
+
+        -- Таблица для хранения метаданных датасетов
+        CREATE TABLE IF NOT EXISTS datasets (
+            id SERIAL PRIMARY KEY,
+            filename VARCHAR(255) NOT NULL,
+            object_name VARCHAR(500) NOT NULL UNIQUE,
+            size_bytes BIGINT NOT NULL,
+            system_prompt_object_name VARCHAR(500),
+            status VARCHAR(50) DEFAULT 'NEW',
+            output_type VARCHAR(10) DEFAULT 'TEXT' CHECK (output_type IN ('TEXT', 'JSON')),
+            schema TEXT NULL,
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            lora_adapter_id INTEGER REFERENCES lora_adapter(id),
+            task_id INTEGER REFERENCES task(id)
+        );
     ## @param primary.initdb.scriptsConfigMap ConfigMap with scripts to be run at first boot
     ## NOTE: This will override `primary.initdb.scripts`
     ##
