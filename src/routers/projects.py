@@ -29,6 +29,7 @@ from shared.minio import (
     get_minio_client,
     create_minio_client_dependency,
     ProjectStorageService,
+    DatasetService,
     MinIOError,
     ObjectNotFoundError
 )
@@ -197,6 +198,129 @@ def get_celery_app():
         backend=f'redis://{redis_host}:{redis_port}/{redis_db}'
     )
     return celery_app
+
+
+@router.post("/{project_id}/skip_generation")
+def skip_generation(
+    project_id: int,
+    repository: DatasetRepository = Depends(get_dataset_repository),
+    status_service: DatasetStatusService = Depends(get_dataset_status_service)
+):
+    """
+    Пропустить генерацию и сразу перейти к валидации на основе seed-датасета
+    """
+    try:
+        # Проверяем что проект существует
+        dataset = repository.get_by_id(project_id)
+        
+        # Проверяем что проект готов к пропуску генерации
+        if dataset.status != "NEW":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Пропустить генерацию можно только на статусе NEW. Текущий статус: {dataset.status}"
+            )
+        
+        # Создаем копию seed-датасета в папку generated, чтобы валидация работала корректно
+        minio_client = get_minio_client()
+        project_storage_service = ProjectStorageService(minio_client)
+        
+        # Загружаем полный seed-датасет
+        dataset_service = DatasetService(minio_client)
+        seed_data = dataset_service.get_full_dataset(dataset.object_name)
+        
+        if not seed_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Seed-датасет пуст или не найден"
+            )
+        
+        # Сохраняем seed-данные как "сгенерированные" (для совместимости с валидацией)
+        output_file = project_storage_service.save_generation_result(project_id, seed_data)
+        
+        # Обновляем статус на READY_FOR_VALIDATION
+        status_service.set_status(project_id, "READY_FOR_VALIDATION")
+        
+        logger.info(f"Генерация пропущена для проекта {project_id}. Seed-датасет скопирован как {output_file}")
+        
+        return {
+            "success": True,
+            "message": f"Генерация пропущена. Проект переведён в статус READY_FOR_VALIDATION",
+            "output_file": output_file,
+            "seed_records_count": len(seed_data)
+        }
+        
+    except DatasetNotFoundError:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (MinIOError, ObjectNotFoundError) as e:
+        logger.error(f"Ошибка MinIO при пропуске генерации для проекта {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при работе с файлами: {str(e)}"
+        )
+    except RepositoryError as e:
+        logger.error(f"Ошибка репозитория при пропуске генерации для проекта {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при обновлении статуса: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при пропуске генерации для проекта {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при пропуске генерации: {str(e)}"
+        )
+
+
+@router.post("/{project_id}/skip_validation")
+def skip_validation(
+    project_id: int,
+    repository: DatasetRepository = Depends(get_dataset_repository),
+    status_service: DatasetStatusService = Depends(get_dataset_status_service)
+):
+    """
+    Пропустить валидацию и сразу перейти к fine-tuning
+    """
+    try:
+        # Проверяем что проект существует
+        dataset = repository.get_by_id(project_id)
+        
+        # Проверяем что проект готов к пропуску валидации
+        if dataset.status != "READY_FOR_VALIDATION":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Пропустить валидацию можно только на статусе READY_FOR_VALIDATION. Текущий статус: {dataset.status}"
+            )
+        
+        # Переводим сразу в READY_FOR_FINE_TUNING
+        status_service.set_status(project_id, "READY_FOR_FINE_TUNING")
+        
+        logger.info(f"Валидация пропущена для проекта {project_id}. Статус изменен на READY_FOR_FINE_TUNING")
+        
+        return {
+            "success": True,
+            "message": f"Валидация пропущена. Проект переведён в статус READY_FOR_FINE_TUNING",
+            "previous_status": "READY_FOR_VALIDATION",
+            "new_status": "READY_FOR_FINE_TUNING"
+        }
+        
+    except DatasetNotFoundError:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RepositoryError as e:
+        logger.error(f"Ошибка репозитория при пропуске валидации для проекта {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при обновлении статуса: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при пропуске валидации для проекта {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка при пропуске валидации: {str(e)}"
+        )
 
 
 @router.post("/{project_id}/start_generation", response_model=TaskResponse)
