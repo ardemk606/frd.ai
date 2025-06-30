@@ -12,10 +12,10 @@ class GenerationConfig:
     temperature: float = 0.7
     
     # Параметры генерации
-    batch_size: int = 2
+    batch_size: int = 3
     total_results: int = 100
     max_workers: int = 10
-    examples_per_api_call: int = 5
+    examples_per_api_call: int = 8
     
     @classmethod
     def from_env(cls) -> 'GenerationConfig':

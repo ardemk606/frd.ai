@@ -15,10 +15,12 @@ import logging
 try:
     from .bayesian_optimizer import BayesianOptimizer
     from .lora_tuning_config import LoRATuningConfig
+    from .evaluation import ModelEvaluator
 except ImportError:
     # Если запускаем напрямую, импортируем абсолютно
     from lora.bayesian_optimizer import BayesianOptimizer
     from lora.lora_tuning_config import LoRATuningConfig
+    from lora.evaluation import ModelEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,15 @@ def load_model(model_name: str = "Qwen/Qwen3-0.6B"):
 
 def setup_lora_model(model, lora_params: Dict[str, Any]):
     """Настраивает LoRA для модели"""
+    # Проверяем, есть ли уже PEFT адаптеры в модели
+    if hasattr(model, 'peft_config') and model.peft_config:
+        logger.info("Найдены существующие PEFT адаптеры, выгружаем их...")
+        try:
+            model = model.unload()
+            logger.info("PEFT адаптеры успешно выгружены")
+        except Exception as e:
+            logger.warning(f"Не удалось выгрузить PEFT адаптеры: {e}")
+    
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=lora_params['rank'],
@@ -74,6 +85,27 @@ def setup_lora_model(model, lora_params: Dict[str, Any]):
     
     peft_model = get_peft_model(model, lora_config)
     return peft_model
+
+def prepare_dataset_with_split(data: List[Dict[str, str]], tokenizer, system_prompt: str = None, val_ratio: float = 0.2):
+    """Подготавливает датасет с разделением на train/val"""
+    import random
+    from datasets import Dataset
+    
+    # Перемешиваем данные
+    random.shuffle(data)
+    
+    # Разделяем на train/val
+    split_idx = int(len(data) * (1 - val_ratio))
+    train_data = data[:split_idx]
+    val_data = data[split_idx:]
+    
+    logger.info(f"Разделение датасета: {len(train_data)} train + {len(val_data)} validation")
+    
+    # Подготавливаем train dataset
+    train_dataset = prepare_dataset(train_data, tokenizer, system_prompt)
+    
+    return train_dataset, val_data
+
 
 def prepare_dataset(data: List[Dict[str, str]], tokenizer, system_prompt: str = None):
     """Подготавливает датасет для обучения"""
@@ -115,22 +147,26 @@ def prepare_dataset(data: List[Dict[str, str]], tokenizer, system_prompt: str = 
     tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
     return tokenized_dataset
 
-def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], output_dir: str):
+def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], output_dir: str, config: LoRATuningConfig = None):
     """Запускает LoRA дообучение"""
+    # Используем конфигурацию или создаем по умолчанию
+    if config is None:
+        config = LoRATuningConfig.from_env()
+    
     # Настраиваем LoRA
     peft_model = setup_lora_model(model, lora_params)
     
-    # Настраиваем параметры обучения
+    # Настраиваем параметры обучения используя конфигурацию
     training_args = TrainingArguments(
         output_dir=output_dir,
-        num_train_epochs=3,
-        per_device_train_batch_size=2,  # Уменьшил batch size для стабильности
-        gradient_accumulation_steps=4,  # Увеличил grad accumulation
+        num_train_epochs=config.num_train_epochs,
+        per_device_train_batch_size=config.per_device_train_batch_size,
+        gradient_accumulation_steps=config.gradient_accumulation_steps,
         learning_rate=lora_params['learning_rate'],
-        logging_steps=10,
-        save_steps=500,
-        eval_steps=500,
-        warmup_steps=100,
+        logging_steps=config.logging_steps,
+        save_steps=config.save_steps,
+        eval_steps=config.eval_steps,
+        warmup_steps=config.warmup_steps,
         remove_unused_columns=False,
         dataloader_drop_last=True,  # Избегаем проблем с разными размерами батчей
         fp16=True,  # Используем mixed precision для экономии памяти
@@ -157,16 +193,20 @@ def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], outpu
 class LoRATuner:
     """Основной класс для дообучения LoRA с байесовской оптимизацией"""
     
-    def __init__(self, config: LoRATuningConfig = None):
+    def __init__(self, config: LoRATuningConfig = None, judge_model_id: str = None):
         """
         Args:
             config: Конфигурация для дообучения
+            judge_model_id: ID модели для LLM Judge оценки
         """
         self.config = config or LoRATuningConfig.from_env()
         self.optimizer = BayesianOptimizer(n_trials=self.config.n_trials)
+        self.evaluator = ModelEvaluator(judge_model_id)
         self.model = None
         self.tokenizer = None
         self.dataset = None
+        self.validation_data = None
+        self.system_prompt = None
         
     def load_data(self, data_path: str, model_name: str = None, system_prompt: str = None) -> None:
         """Загружает данные для обучения
@@ -184,18 +224,30 @@ class LoRATuner:
             
             logger.info(f"Загружено {len(data)} примеров из {data_path}")
             
+            # Проверяем минимальное количество примеров
+            if len(data) < 5:
+                logger.warning(f"⚠️  МАЛО ДАННЫХ: Загружено только {len(data)} примеров! "
+                              f"Рекомендуется минимум 50-100 примеров для качественного дообучения.")
+            elif len(data) < 20:
+                logger.warning(f"⚠️  НЕБОЛЬШОЙ ДАТАСЕТ: Загружено {len(data)} примеров. "
+                              f"Для лучших результатов рекомендуется 50-100+ примеров.")
+            else:
+                logger.info(f"✅ Датасет содержит достаточно данных: {len(data)} примеров")
+            
             # Загружаем модель и токенизатор
             logger.info("Загрузка модели и токенизатора...")
             model_to_use = model_name or self.config.model_name
             self.model, self.tokenizer = load_model(model_to_use)
             logger.info("Модель и токенизатор загружены")
             
-            # Подготавливаем датасет с системным промптом
-            logger.info("Подготовка датасета...")
+            # Подготавливаем датасет с разделением на train/val
+            logger.info("Подготовка датасета с train/val split...")
             if system_prompt:
                 logger.info("Заменяем плейсхолдеры системного промпта на реальный промпт")
-            self.dataset = prepare_dataset(data, self.tokenizer, system_prompt)
-            logger.info("Датасет подготовлен")
+            
+            self.dataset, self.validation_data = prepare_dataset_with_split(data, self.tokenizer, system_prompt)
+            self.system_prompt = system_prompt
+            logger.info("Датасет подготовлен с разделением на train/validation")
             
         except Exception as e:
             logger.error(f"Ошибка при загрузке данных: {e}", exc_info=True)
@@ -209,22 +261,28 @@ class LoRATuner:
         # Создаем временную директорию для сохранения адаптера
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
+                logger.info(f"Trial {trial.number}: Начинаем обучение с параметрами {lora_params}")
+                
                 # Дообучаем модель
-                fine_tune_lora(
+                peft_model = fine_tune_lora(
                     self.model, 
                     self.tokenizer, 
                     self.dataset, 
                     lora_params, 
-                    temp_dir
+                    temp_dir,
+                    self.config  # Передаем конфигурацию
                 )
                 
-                # Здесь должна быть оценка качества модели
-                # Пока возвращаем случайную метрику для демонстрации
-                import random
-                score = random.uniform(0.7, 0.95)
+                # Оценка качества через BERTScore на validation set
+                bert_score = self.evaluator.quick_evaluate(
+                    peft_model, 
+                    self.tokenizer, 
+                    self.validation_data, 
+                    self.system_prompt
+                )
                 
-                logger.info(f"Trial {trial.number}: params={lora_params}, score={score:.4f}")
-                return score
+                logger.info(f"Trial {trial.number}: params={lora_params}, BERTScore={bert_score:.4f}")
+                return bert_score
                 
             except Exception as e:
                 logger.error(f"Ошибка в trial {trial.number}: {e}", exc_info=True)
@@ -271,14 +329,30 @@ class LoRATuner:
             self.tokenizer,
             self.dataset,
             best_params,
-            output_dir
+            output_dir,
+            self.config  # Передаем конфигурацию
         )
+        
+        # Детальная оценка финальной модели через BERTScore + LLM Judge
+        logger.info("Проводим детальную оценку финальной модели...")
+        detailed_metrics = self.evaluator.detailed_evaluate(
+            final_model,
+            self.tokenizer, 
+            self.validation_data,
+            self.system_prompt
+        )
+        
+        logger.info(f"Финальные метрики:")
+        logger.info(f"  BERTScore: {detailed_metrics['bert_score']:.4f}")
+        logger.info(f"  LLM Judge: {detailed_metrics['llm_judge_score']:.2f}/100")
+        logger.info(f"  Combined: {detailed_metrics['combined_score']:.4f}")
         
         # Сохраняем результаты
         results = {
             'best_params': best_params,
             'output_dir': output_dir,
-            'n_trials': self.config.n_trials
+            'n_trials': self.config.n_trials,
+            'metrics': detailed_metrics
         }
         
         with open(os.path.join(output_dir, 'optimization_results.json'), 'w') as f:
