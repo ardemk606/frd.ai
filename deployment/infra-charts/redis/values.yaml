@@ -2138,7 +2138,7 @@ metrics:
 volumePermissions:
   ## @param volumePermissions.enabled Enable init container that changes the owner/group of the PV mount point to `runAsUser:fsGroup`
   ##
-  enabled: true
+  enabled: false
   ## @param volumePermissions.image.registry [default: REGISTRY_NAME] Init container image registry
   ## @param volumePermissions.image.repository [default: REPOSITORY_NAME/os-shell] Init container image repository
   ## @skip volumePermissions.image.tag Init container image tag (immutable tags are recommended)
@@ -2170,6 +2170,12 @@ volumePermissions:
   ## @param volumePermissions.securityContext.runAsUser Set init container's Security Context runAsUser
   ##
   securityContext:
+    runAsUser: 0
+  ## Configure init container's Container Security Context
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  ## @param volumePermissions.containerSecurityContext.runAsUser Set init container's Container Security Context runAsUser
+  ##
+  containerSecurityContext:
     runAsUser: 0
 
 ## Kubectl InitContainer
