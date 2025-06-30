@@ -224,7 +224,8 @@ def start_generation(
             "examples_count": request_body.generation_params.examples_count,
             "is_structured": request_body.generation_params.is_structured,
             "output_format": request_body.generation_params.output_format,
-            "json_schema": request_body.generation_params.json_schema if request_body.generation_params.is_structured else None
+            "json_schema": request_body.generation_params.json_schema if request_body.generation_params.is_structured else None,
+            "model_id": request_body.generation_params.model_id  # Добавляем model_id
         }
         
         # Отправляем задачу в Celery
@@ -235,12 +236,15 @@ def start_generation(
         )
         
         logger.info(f"Задача генерации отправлена для проекта {project_id}, task_id: {task.id}")
+        if request_body.generation_params.model_id:
+            logger.info(f"Используется модель: {request_body.generation_params.model_id}")
         
         return TaskResponse(
             success=True,
             message=f"Задача генерации запущена для проекта {project_id}",
             task_id=task.id,
-            queue_name="celery"
+            queue_name="celery",
+            model_id=request_body.generation_params.model_id
         )
         
     except DatasetNotFoundError:
