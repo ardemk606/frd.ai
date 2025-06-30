@@ -37,6 +37,10 @@ jobs:
           - name: worker
             path: ./worker
             dockerfile: ./worker/Dockerfile.uv
+    outputs:
+      api-built: ${{ steps.set-output.outputs.api-built }}
+      frontend-built: ${{ steps.set-output.outputs.frontend-built }}
+      worker-built: ${{ steps.set-output.outputs.worker-built }}
 
     steps:
       - name: Checkout repository
@@ -96,21 +100,58 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}/${{ matrix.app.name }}:${{ github.sha }}
 
-      - name: Update Helm chart values
-        if: steps.build_decision.outputs.should_build == 'true'
+      - name: Set outputs for next job
+        id: set-output
         run: |
-          # Устанавливаем yq для редактирования YAML
+          if [[ "${{ steps.build_decision.outputs.should_build }}" == "true" && "${{ matrix.app.name }}" == "api" ]]; then
+            echo "api-built=true" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{ steps.build_decision.outputs.should_build }}" == "true" && "${{ matrix.app.name }}" == "frontend" ]]; then
+            echo "frontend-built=true" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{ steps.build_decision.outputs.should_build }}" == "true" && "${{ matrix.app.name }}" == "worker" ]]; then
+            echo "worker-built=true" >> $GITHUB_OUTPUT
+          fi
+
+  update-charts:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: always() && (contains(needs.build-and-push.outputs.*, 'true'))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install yq
+        run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
-          # Путь к values.yaml соответствующего чарта
-          CHART_VALUES_FILE="deployment/app-charts/${{ matrix.app.name }}/values.yaml"
+      - name: Update Helm chart values
+        run: |
+          # Определяем какие компоненты были собраны
+          UPDATED_COMPONENTS=""
 
-          # Обновляем тег
-          yq -i '.image.tag = "${{ github.sha }}"' $CHART_VALUES_FILE
+          if [[ "${{ needs.build-and-push.outputs.api-built }}" == "true" ]]; then
+            echo "Updating API chart..."
+            yq -i '.image.tag = "${{ github.sha }}"' deployment/app-charts/api/values.yaml
+            UPDATED_COMPONENTS="$UPDATED_COMPONENTS api"
+          fi
 
-          # Коммитим изменения
+          if [[ "${{ needs.build-and-push.outputs.frontend-built }}" == "true" ]]; then
+            echo "Updating Frontend chart..."
+            yq -i '.image.tag = "${{ github.sha }}"' deployment/app-charts/frontend/values.yaml
+            UPDATED_COMPONENTS="$UPDATED_COMPONENTS frontend"
+          fi
+
+          if [[ "${{ needs.build-and-push.outputs.worker-built }}" == "true" ]]; then
+            echo "Updating Worker chart..."
+            yq -i '.image.tag = "${{ github.sha }}"' deployment/app-charts/worker/values.yaml
+            UPDATED_COMPONENTS="$UPDATED_COMPONENTS worker"
+          fi
+
+          # Коммитим все изменения одним коммитом
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add $CHART_VALUES_FILE
-          git commit -m "ci: Update image tag for ${{ matrix.app.name }} to ${{ github.sha }}"
+          git add deployment/app-charts/*/values.yaml
+          git commit -m "ci: Update image tags for${UPDATED_COMPONENTS} to ${{ github.sha }}"
+          git pull --rebase origin ${{ github.ref_name }}
           git push
