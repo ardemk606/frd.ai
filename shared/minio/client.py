@@ -396,4 +396,37 @@ class MinIOClient:
         except S3Error as e:
             error_msg = f"Ошибка при создании URL для {object_name}: {str(e)}"
             logger.error(error_msg)
-            raise MinIOError(error_msg) from e 
+            raise MinIOError(error_msg) from e
+    
+    def get_object_content(self, object_name: str) -> bytes:
+        """
+        Получает содержимое объекта как байты
+        
+        Args:
+            object_name: Имя объекта
+            
+        Returns:
+            Содержимое объекта как байты
+            
+        Raises:
+            ObjectNotFoundError: Если объект не найден
+            MinIOError: При других ошибках
+        """
+        try:
+            response = self._client.get_object(self.config.bucket_name, object_name)
+            content = response.read()
+            response.close()
+            response.release_conn()
+            
+            logger.info(f"Получено содержимое объекта: {object_name} ({len(content)} байт)")
+            return content
+            
+        except S3Error as e:
+            if e.code == 'NoSuchKey':
+                error_msg = f"Объект не найден: {object_name}"
+                logger.warning(error_msg)
+                raise ObjectNotFoundError(error_msg) from e
+            else:
+                error_msg = f"Ошибка S3 при получении содержимого {object_name}: {str(e)}"
+                logger.error(error_msg)
+                raise MinIOError(error_msg) from e 

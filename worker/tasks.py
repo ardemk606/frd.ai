@@ -109,6 +109,17 @@ def fine_tune_lora_task(self, dataset_id: int, output_dir: str = None, model_nam
         dataset_service = DatasetService(minio_client)
         dataset_path = dataset_service.download_dataset_to_temp_file(dataset_object_name)
 
+        # Шаг 2.5: Загружаем системный промпт если есть
+        system_prompt = None
+        if dataset_record.system_prompt_object_name:
+            try:
+                logger.info(f"Загружаем системный промпт из {dataset_record.system_prompt_object_name}")
+                system_prompt_content = minio_client.get_object_content(dataset_record.system_prompt_object_name)
+                system_prompt = system_prompt_content.decode('utf-8').strip()
+                logger.info(f"Системный промпт загружен: {len(system_prompt)} символов")
+            except Exception as e:
+                logger.warning(f"Не удалось загрузить системный промпт: {e}. Продолжаем без него.")
+
         # Шаг 3: Запускаем дообучение
         from lora.lora_tuning import LoRATuner, LoRATuningConfig
         
@@ -121,7 +132,8 @@ def fine_tune_lora_task(self, dataset_id: int, output_dir: str = None, model_nam
         results = tuner.run_optimization(
             data_path=dataset_path,
             output_dir=final_output_dir,
-            model_name=model_name
+            model_name=model_name,
+            system_prompt=system_prompt
         )
         
         logger.info(f"LoRA дообучение успешно завершено для датасета {dataset_id}.")
