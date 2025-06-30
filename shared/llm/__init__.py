@@ -10,6 +10,11 @@ from typing import Optional
 class LLMProvider(str, Enum):
     """Enum для поддерживаемых провайдеров LLM"""
     GEMINI = "gemini"
+    GIGACHAT = "gigachat"
+    # В будущем можно добавить:
+    # OPENAI = "openai"
+    # ANTHROPIC = "anthropic"
+    # OLLAMA = "ollama"
 
 
 class BaseLLMClient(ABC):
@@ -76,12 +81,32 @@ class LLMModelInfo:
 
 # Реестр доступных моделей (захардкожен как требуется)
 AVAILABLE_MODELS = [
+    # GigaChat модели
+    LLMModelInfo(
+        provider=LLMProvider.GIGACHAT,
+        model_id="GigaChat",
+        display_name="GigaChat",
+        description="Базовая модель GigaChat от Сбера для генерации текста",
+        is_default=True
+    ),
+    LLMModelInfo(
+        provider=LLMProvider.GIGACHAT,
+        model_id="GigaChat-Pro",
+        display_name="GigaChat Pro",
+        description="Продвинутая модель GigaChat с улучшенными возможностями"
+    ),
+    LLMModelInfo(
+        provider=LLMProvider.GIGACHAT,
+        model_id="GigaChat-Max",
+        display_name="GigaChat Max",
+        description="Максимальная модель GigaChat с лучшим качеством генерации"
+    ),
+    # Gemini модели
     LLMModelInfo(
         provider=LLMProvider.GEMINI,
         model_id="gemini-2.5-flash",
         display_name="Gemini 2.5 Flash",
-        description="Быстрая модель Google Gemini для генерации текста",
-        is_default=True
+        description="Быстрая модель Google Gemini для генерации текста"
     ),
     LLMModelInfo(
         provider=LLMProvider.GEMINI,

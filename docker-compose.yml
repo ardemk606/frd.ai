@@ -100,6 +100,9 @@ services:
       TOTAL_RESULTS: "100"
       MAX_WORKERS: "10"
       EXAMPLES_PER_API_CALL: "5"
+      
+      # GigaChat Settings
+      GIGACHAT_ACCESS_TOKEN: ${GIGACHAT_ACCESS_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,6 +147,9 @@ services:
       
       # AI Settings
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      
+      # GigaChat Settings
+      GIGACHAT_ACCESS_TOKEN: ${GIGACHAT_ACCESS_TOKEN}
       
       # LoRA Settings
       LORA_MODEL_NAME: "Qwen/Qwen3-0.6B"
@@ -203,6 +209,9 @@ services:
       
       # AI Settings
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      
+      # GigaChat Settings
+      GIGACHAT_ACCESS_TOKEN: ${GIGACHAT_ACCESS_TOKEN}
       
       # LoRA Settings
       LORA_MODEL_NAME: "Qwen/Qwen3-0.6B"

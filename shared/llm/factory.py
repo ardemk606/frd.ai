@@ -6,6 +6,7 @@ from typing import Optional
 
 from shared.llm import BaseLLMClient, LLMProvider
 from shared.llm.gemini.gemini_client import GeminiClient
+from shared.llm.gigachat.gigachat_client import GigaChatClient
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ class LLMClientFactory:
         if provider == LLMProvider.GEMINI:
             api_key = kwargs.get('api_key')
             return GeminiClient(api_key=api_key)
+        
+        elif provider == LLMProvider.GIGACHAT:
+            # Передаем все kwargs в GigaChatClient
+            return GigaChatClient(**kwargs)
         
         # В будущем можно добавить другие провайдеры:
         # elif provider == LLMProvider.OPENAI:
