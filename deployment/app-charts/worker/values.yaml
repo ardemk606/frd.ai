@@ -93,16 +93,16 @@ worker:
 # Общая конфигурация (неконфиденциальная)
 config:
   minio:
-    endpoint: "minio:9000"
+    endpoint: "minio.frd:9000"
     bucket: "seed-dataset"
     secure: "false"
   database:
-    host: "postgres"
+    host: "postgres.frd"
     port: "5432"
     name: "datasets"
     user: "postgres"
   redis:
-    host: "redis"
+    host: "redis.frd"
     port: "6379"
     db: "0"
   lora:
