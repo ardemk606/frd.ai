@@ -505,7 +505,7 @@ master:
   persistence:
     ## @param master.persistence.enabled Enable persistence on Redis(R) master nodes using Persistent Volume Claims
     ##
-    enabled: true
+    enabled: false
     ## @param master.persistence.medium Provide a medium for `emptyDir` volumes.
     ##
     medium: ""
