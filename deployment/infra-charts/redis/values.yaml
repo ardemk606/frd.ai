@@ -2173,10 +2173,26 @@ volumePermissions:
     runAsUser: 0
   ## Configure init container's Container Security Context
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  ## @param volumePermissions.containerSecurityContext.enabled Enable init container's Container Security Context
   ## @param volumePermissions.containerSecurityContext.runAsUser Set init container's Container Security Context runAsUser
+  ## @param volumePermissions.containerSecurityContext.runAsGroup Set init container's Container Security Context runAsGroup
+  ## @param volumePermissions.containerSecurityContext.runAsNonRoot Set init container's Container Security Context runAsNonRoot
+  ## @param volumePermissions.containerSecurityContext.readOnlyRootFilesystem Set init container's Container Security Context read-only root filesystem
+  ## @param volumePermissions.containerSecurityContext.allowPrivilegeEscalation Set init container's Container Security Context allowPrivilegeEscalation
+  ## @param volumePermissions.containerSecurityContext.seccompProfile.type Set init container's Container Security Context seccompProfile
+  ## @param volumePermissions.containerSecurityContext.capabilities.drop Set init container's Container Security Context capabilities to drop
   ##
   containerSecurityContext:
+    enabled: true
     runAsUser: 0
+    runAsGroup: 0
+    runAsNonRoot: false
+    allowPrivilegeEscalation: true
+    readOnlyRootFilesystem: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: []
 
 ## Kubectl InitContainer
 ## used by Sentinel to update the isMaster label on the Redis(TM) pods
