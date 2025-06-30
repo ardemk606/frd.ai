@@ -118,7 +118,7 @@ config:
     bucket: "seed-dataset"
     secure: "false"
   database:
-    host: "postgres.frd"
+    host: "postgres-postgresql.frd"
     port: "5432"
     name: "datasets"
     user: "postgres"
