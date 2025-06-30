@@ -234,7 +234,9 @@ services:
 
   # Streamlit Frontend
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
     container_name: streamlit-frontend
     ports:
       - "8501:8501"
