@@ -99,14 +99,26 @@ class SelfInstructProcessor:
                 except Exception as e:
                     logger.error(f"Ошибка при обработке одного из запросов к API: {e}", exc_info=True)
 
-        final_results = all_results[:self.config.total_results]
+        generated_results = all_results[:self.config.total_results]
+        
+        # Загружаем полный seed-датасет для объединения
+        try:
+            full_seed_data = self.dataset_service.get_full_dataset(dataset.object_name)
+            logger.info(f"Загружен полный seed-датасет: {len(full_seed_data)} записей")
+        except Exception as e:
+            logger.warning(f"Не удалось загрузить полный seed-датасет: {e}. Будут сохранены только сгенерированные данные.")
+            full_seed_data = seed_examples  # Используем preview как fallback
+        
+        # Объединяем seed + generated данные
+        final_results = full_seed_data + generated_results
+        logger.info(f"Объединено {len(full_seed_data)} seed-записей + {len(generated_results)} сгенерированных = {len(final_results)} итого")
         
         # Сохраняем результаты через наш MinIO API
         try:
             output_file = self.project_storage_service.save_generation_result(
                 project_id, final_results
             )
-            logger.info(f"Обработка завершена. Итого сохранено: {len(final_results)} результатов.")
+            logger.info(f"Обработка завершена. Итого сохранено: {len(final_results)} результатов (включая {len(full_seed_data)} исходных).")
             
             # Обновляем статус проекта после успешной генерации
             try:

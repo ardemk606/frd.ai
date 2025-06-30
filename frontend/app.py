@@ -140,6 +140,34 @@ def start_validation(project_id):
         return None
 
 
+def skip_generation(project_id):
+    """Пропустить генерацию и перейти сразу к валидации"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        response = requests.post(f"{base_url}/projects/{project_id}/skip_generation")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при пропуске генерации: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            st.error(f"Детали ошибки: {e.response.text}")
+        return None
+
+
+def skip_validation(project_id):
+    """Пропустить валидацию и перейти сразу к fine-tuning"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        response = requests.post(f"{base_url}/projects/{project_id}/skip_validation")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при пропуске валидации: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            st.error(f"Детали ошибки: {e.response.text}")
+        return None
+
+
 def start_fine_tuning(project_id):
     """Запустить LoRA fine-tuning"""
     try:
@@ -186,7 +214,7 @@ def show_status_pipeline(current_status):
         "NEW",
         "GENERATING_DATASET", 
         "READY_FOR_VALIDATION",
-        "VALIDATION",
+        "VALIDATING",
         "READY_FOR_FINE_TUNING",
         "FINE_TUNING",
         "READY_FOR_DEPLOY",
@@ -613,10 +641,35 @@ elif st.session_state.current_page == "Детали проекта":
         
         # Проверяем, не в финальном ли статусе
         if project['status'] != 'DEPLOYED':
-            # Если статус NEW - показываем специальную кнопку для генерации
+            # Если статус NEW - показываем кнопки для генерации или пропуска
             if project['status'] == 'NEW':
-                if st.button("🚀 Настроить генерацию", key="setup_generation", use_container_width=True, type="primary"):
-                    st.session_state.show_generation_modal = True
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🚀 Настроить генерацию", key="setup_generation", use_container_width=True, type="primary"):
+                        st.session_state.show_generation_modal = True
+                        st.rerun()
+                
+                with col2:
+                    if st.button("⏩ Пропустить генерацию", key="skip_generation", use_container_width=True):
+                        with st.spinner("Пропускаем генерацию и переходим к валидации..."):
+                            result = skip_generation(st.session_state.selected_project_id)
+                            
+                            if result and result.get("success"):
+                                st.success(f"✅ {result.get('message')}")
+                                if result.get('seed_records_count'):
+                                    st.info(f"📊 Использовано {result.get('seed_records_count')} записей из исходного датасета")
+                                st.rerun()  # Обновляем страницу чтобы показать новый статус
+                            else:
+                                st.error("Не удалось пропустить генерацию")
+            
+            # Если статус GENERATING_DATASET - показываем информацию о процессе
+            elif project['status'] == 'GENERATING_DATASET':
+                st.info("🔄 Генерация данных выполняется...")
+                st.caption("Генерация продолжится в фоне. Страница обновится автоматически при завершении.")
+                
+                # Кнопка для ручного обновления статуса
+                if st.button("🔄 Обновить статус", key="refresh_status", use_container_width=True):
                     st.rerun()
             
             # Если статус READY_FOR_VALIDATION - показываем кнопку валидации
@@ -636,15 +689,15 @@ elif st.session_state.current_page == "Детали проекта":
                                 st.error("Не удалось запустить валидацию")
                 
                 with col2:
-                    if st.button("⏭️ Пропустить валидацию", key="skip_validation", use_container_width=True):
-                        with st.spinner("Переводим проект к следующему шагу..."):
-                            result = next_step_project(st.session_state.selected_project_id)
+                    if st.button("⏭️ Пропустить валидацию", key="skip_validation_btn", use_container_width=True):
+                        with st.spinner("Пропускаем валидацию и переходим к fine-tuning..."):
+                            result = skip_validation(st.session_state.selected_project_id)
                             
                             if result and result.get("success"):
                                 st.success(f"✅ {result.get('message')}")
                                 st.rerun()  # Обновляем страницу чтобы показать новый статус
                             else:
-                                st.error("Не удалось перейти к следующему шагу")
+                                st.error("Не удалось пропустить валидацию")
             
             # Если статус READY_FOR_FINE_TUNING - показываем кнопку fine-tuning
             elif project['status'] == 'READY_FOR_FINE_TUNING':
