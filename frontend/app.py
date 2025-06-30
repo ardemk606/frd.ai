@@ -66,38 +66,28 @@ def upload_dataset(uploaded_file, system_prompt):
 
 def get_projects():
     """Получить список всех проектов"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.get(f"{base_url}/projects/short_info")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при получении проектов: {e}")
-        return None
+    return _make_api_request(
+        "/projects/short_info",
+        "Ошибка при получении проектов",
+        method="GET"
+    )
 
 
 def get_project_detail(project_id):
     """Получить детальную информацию о проекте"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.get(f"{base_url}/projects/{project_id}/detail")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при получении информации о проекте: {e}")
-        return None
+    return _make_api_request(
+        f"/projects/{project_id}/detail",
+        "Ошибка при получении информации о проекте",
+        method="GET"
+    )
 
 
 def next_step_project(project_id):
     """Перейти к следующему шагу проекта (простой переход)"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.post(f"{base_url}/projects/{project_id}/next_step")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при переходе к следующему шагу: {e}")
-        return None
+    return _make_api_request(
+        f"/projects/{project_id}/next_step",
+        "Ошибка при переходе к следующему шагу"
+    )
 
 
 def start_generation(project_id, examples_count, is_structured, output_format, json_schema, model_id=None):
@@ -128,13 +118,28 @@ def start_generation(project_id, examples_count, is_structured, output_format, j
 
 def start_validation(project_id):
     """Запустить валидацию датасета"""
+    return _make_api_request(
+        f"/dataset/{project_id}/validate",
+        "Ошибка при запуске валидации"
+    )
+
+
+def _make_api_request(endpoint_path, error_message_prefix, method="POST", **kwargs):
+    """Приватный метод для выполнения запросов к API"""
     try:
         base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.post(f"{base_url}/dataset/{project_id}/validate")
+        
+        if method.upper() == "GET":
+            response = requests.get(f"{base_url}{endpoint_path}", **kwargs)
+        elif method.upper() == "POST":
+            response = requests.post(f"{base_url}{endpoint_path}", **kwargs)
+        else:
+            raise ValueError(f"Неподдерживаемый HTTP метод: {method}")
+            
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
-        st.error(f"Ошибка при запуске валидации: {e}")
+        st.error(f"{error_message_prefix}: {e}")
         if hasattr(e, 'response') and e.response is not None:
             st.error(f"Детали ошибки: {e.response.text}")
         return None
@@ -142,68 +147,44 @@ def start_validation(project_id):
 
 def skip_generation(project_id):
     """Пропустить генерацию и перейти сразу к валидации"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.post(f"{base_url}/projects/{project_id}/skip_generation")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при пропуске генерации: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            st.error(f"Детали ошибки: {e.response.text}")
-        return None
+    return _make_api_request(
+        f"/projects/{project_id}/skip_generation",
+        "Ошибка при пропуске генерации"
+    )
 
 
 def skip_validation(project_id):
     """Пропустить валидацию и перейти сразу к fine-tuning"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.post(f"{base_url}/projects/{project_id}/skip_validation")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при пропуске валидации: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            st.error(f"Детали ошибки: {e.response.text}")
-        return None
+    return _make_api_request(
+        f"/projects/{project_id}/skip_validation", 
+        "Ошибка при пропуске валидации"
+    )
 
 
 def start_fine_tuning(project_id):
     """Запустить LoRA fine-tuning"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.post(f"{base_url}/projects/{project_id}/start_fine_tuning")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при запуске fine-tuning: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            st.error(f"Детали ошибки: {e.response.text}")
-        return None
+    return _make_api_request(
+        f"/projects/{project_id}/start_fine_tuning",
+        "Ошибка при запуске fine-tuning"
+    )
 
 
 def get_available_models():
     """Получить список доступных моделей LLM"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.get(f"{base_url}/models/available")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при получении списка моделей: {e}")
-        return None
+    return _make_api_request(
+        "/models/available",
+        "Ошибка при получении списка моделей",
+        method="GET"
+    )
 
 
 def get_default_model():
     """Получить модель по умолчанию"""
-    try:
-        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
-        response = requests.get(f"{base_url}/models/default")
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Ошибка при получении модели по умолчанию: {e}")
-        return None
+    return _make_api_request(
+        "/models/default",
+        "Ошибка при получении модели по умолчанию",
+        method="GET"
+    )
 
 
 def show_status_pipeline(current_status):
