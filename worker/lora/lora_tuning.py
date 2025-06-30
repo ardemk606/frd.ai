@@ -75,14 +75,25 @@ def setup_lora_model(model, lora_params: Dict[str, Any]):
     peft_model = get_peft_model(model, lora_config)
     return peft_model
 
-def prepare_dataset(data: List[Dict[str, str]], tokenizer):
+def prepare_dataset(data: List[Dict[str, str]], tokenizer, system_prompt: str = None):
     """Подготавливает датасет для обучения"""
     from datasets import Dataset
     
     # Подготавливаем тексты в формате для causal LM
     texts = []
     for item in data:
-        text = f"<|im_start|>user\n{item['input']}<|im_end|>\n<|im_start|>assistant\n{item['output']}<|im_end|>"
+        # Заменяем плейсхолдер системного промпта на реальный, если он есть
+        system_text = ""
+        if 'system' in item:
+            if item['system'] == "$systemPrompt" and system_prompt:
+                # Заменяем плейсхолдер на реальный системный промпт
+                system_text = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+            elif item['system'] != "$systemPrompt":
+                # Используем системный промпт из записи (если он не плейсхолдер)
+                system_text = f"<|im_start|>system\n{item['system']}<|im_end|>\n"
+        
+        # Формируем полный текст
+        text = f"{system_text}<|im_start|>user\n{item['input']}<|im_end|>\n<|im_start|>assistant\n{item['output']}<|im_end|>"
         texts.append(text)
     
     # Создаем Dataset
@@ -157,12 +168,13 @@ class LoRATuner:
         self.tokenizer = None
         self.dataset = None
         
-    def load_data(self, data_path: str, model_name: str = None) -> None:
+    def load_data(self, data_path: str, model_name: str = None, system_prompt: str = None) -> None:
         """Загружает данные для обучения
         
         Args:
             data_path: Путь к файлу с данными
             model_name: Название модели для загрузки
+            system_prompt: Системный промпт для замены плейсхолдеров
         """
         logger.info(f"Загрузка данных из {data_path}...")
         
@@ -178,9 +190,11 @@ class LoRATuner:
             self.model, self.tokenizer = load_model(model_to_use)
             logger.info("Модель и токенизатор загружены")
             
-            # Подготавливаем датасет
+            # Подготавливаем датасет с системным промптом
             logger.info("Подготовка датасета...")
-            self.dataset = prepare_dataset(data, self.tokenizer)
+            if system_prompt:
+                logger.info("Заменяем плейсхолдеры системного промпта на реальный промпт")
+            self.dataset = prepare_dataset(data, self.tokenizer, system_prompt)
             logger.info("Датасет подготовлен")
             
         except Exception as e:
@@ -220,18 +234,19 @@ class LoRATuner:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
     
-    def run_optimization(self, data_path: str, output_dir: str = "./lora_results", model_name: str = None) -> Dict[str, Any]:
+    def run_optimization(self, data_path: str, output_dir: str = "./lora_results", model_name: str = None, system_prompt: str = None) -> Dict[str, Any]:
         """Запускает полный цикл оптимизации и дообучения
         
         Args:
             data_path: Путь к файлу с данными
             output_dir: Директория для сохранения результатов
             model_name: Название модели для загрузки
+            system_prompt: Системный промпт для замены плейсхолдеров
         """
         logger.info("Начинаем дообучение LoRA с байесовской оптимизацией...")
         
         # Загружаем данные
-        self.load_data(data_path, model_name)
+        self.load_data(data_path, model_name, system_prompt)
         
         # Запускаем байесовскую оптимизацию
         logger.info(f"Запускаем оптимизацию на {self.config.n_trials} попыток...")

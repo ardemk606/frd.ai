@@ -390,6 +390,9 @@ class DatasetValidator:
                 clean_record = {k: v for k, v in record.items() if not k.startswith('_')}
                 clean_records.append(clean_record)
             
+            # Нормализуем system промпты перед сохранением
+            clean_records = self._normalize_system_prompts(clean_records)
+            
             # Создаем запрос для upload_jsonl
             upload_request = JSONLUploadRequest(
                 object_name=object_name,
@@ -473,9 +476,42 @@ class DatasetValidator:
             # Сохраняем через наш MinIO клиент
             result = self.minio_client.upload_text(upload_request)
             
-            logger.info(f"Отчет о фильтрации сохранен: {object_name}")
+            logger.info(f"Отчет о фильтрации сохранен в MinIO: {object_name}")
             return object_name
             
         except Exception as e:
-            logger.error(f"Ошибка сохранения отчета о фильтрации: {e}")
-            raise 
+            logger.error(f"Ошибка при сохранении отчета о фильтрации: {e}")
+            raise RuntimeError(f"Не удалось сохранить отчет о фильтрации: {str(e)}") from e
+
+    def _normalize_system_prompts(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Нормализует system промпты в записях:
+        1. Добавляет system: "$systemPrompt" для записей без system
+        2. Заменяет реальные system промпты на плейсхолдер "$systemPrompt"
+        
+        Args:
+            records: Список записей датасета
+            
+        Returns:
+            Список записей с нормализованными system промптами
+        """
+        normalized_records = []
+        
+        for record in records:
+            normalized_record = record.copy()
+            
+            # Проверяем наличие поля system
+            if 'system' not in normalized_record:
+                # Случай 1: Нет system поля - добавляем плейсхолдер
+                normalized_record['system'] = "$systemPrompt"
+                logger.debug("Добавлен плейсхолдер system для записи без system поля")
+            elif normalized_record['system'] != "$systemPrompt":
+                # Случай 2: Есть реальный system промпт - заменяем на плейсхолдер
+                logger.debug(f"Заменен реальный system промпт на плейсхолдер")
+                normalized_record['system'] = "$systemPrompt"
+            # Случай 3: Уже есть плейсхолдер - ничего не делаем
+            
+            normalized_records.append(normalized_record)
+        
+        logger.info(f"Нормализованы system промпты для {len(records)} записей")
+        return normalized_records 
