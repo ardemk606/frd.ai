@@ -22,14 +22,26 @@ def generate_dataset_task(self, generation_params):
             - is_structured: Структурированные ли данные
             - output_format: Формат вывода
             - json_schema: JSON схема (если нужна)
+            - model_id: ID модели для генерации (опционально)
     """
     try:
-        logger.info(f"Начинаю генерацию для проекта {generation_params.get('project_id')}")
+        project_id = generation_params.get('project_id')
+        model_id = generation_params.get('model_id')
+        
+        logger.info(f"Начинаю генерацию для проекта {project_id}")
+        if model_id:
+            logger.info(f"Используется модель: {model_id}")
+        else:
+            logger.info("Используется модель по умолчанию")
         
         # Обновляем статус задачи
         current_task.update_state(
             state='PROGRESS',
-            meta={'current': 0, 'total': generation_params.get('examples_count', 0)}
+            meta={
+                'current': 0, 
+                'total': generation_params.get('examples_count', 0),
+                'model_id': model_id
+            }
         )
         
         # Создаем процессор
@@ -38,19 +50,20 @@ def generate_dataset_task(self, generation_params):
         # Генерируем данные
         result = processor.process_generation_request(generation_params)
         
-        logger.info(f"Генерация завершена для проекта {generation_params.get('project_id')}")
+        logger.info(f"Генерация завершена для проекта {project_id}")
         
         return {
             'status': 'SUCCESS',
             'result': result,
-            'project_id': generation_params.get('project_id')
+            'project_id': project_id,
+            'model_id': model_id
         }
         
     except Exception as exc:
         logger.error(f"Ошибка генерации: {exc}")
         current_task.update_state(
             state='FAILURE',
-            meta={'error': str(exc)}
+            meta={'error': str(exc), 'model_id': generation_params.get('model_id')}
         )
         raise exc
 

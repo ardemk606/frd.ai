@@ -1,8 +1,8 @@
 import logging
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-from shared.llm.gemini.gemini_client import GeminiClient
+from shared.llm.factory import get_llm_client
 from shared.minio import MinIOClient
 from shared.minio.dependencies import get_minio_client
 
@@ -10,14 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class ResponseGenerator:
-    """Класс для генерации ответов через Google Gemini API"""
+    """Класс для генерации ответов через LLM API"""
 
-    def __init__(self, system_prompt_path: str, user_prompt_path: str):
+    def __init__(self, system_prompt_path: str, user_prompt_path: str, model_id: Optional[str] = None):
         self.system_prompt_path = system_prompt_path
         self.user_prompt_path = user_prompt_path
+        self.model_id = model_id
         
-        # Используем наш GeminiClient
-        self.gemini_client = GeminiClient()
+        # Используем фабрику для создания клиента
+        self.llm_client = get_llm_client(model_id=model_id)
         self.minio_client = get_minio_client()
 
     def _load_prompt_from_minio(self, object_name: str) -> str:
@@ -53,10 +54,11 @@ class ResponseGenerator:
             
             logger.debug(f"Generated prompt length: {len(contents)}")
             
-            # Используем наш GeminiClient
-            response_text = self.gemini_client.generate_content(
+            # Используем LLM клиент через фабрику
+            response_text = self.llm_client.generate_content(
                 system_instruction=system_prompt,
-                contents=contents
+                contents=contents,
+                model=self.model_id  # Передаем модель явно
             )
             
             logger.debug(f"Raw response from API: {response_text}")

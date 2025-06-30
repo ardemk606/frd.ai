@@ -100,7 +100,7 @@ def next_step_project(project_id):
         return None
 
 
-def start_generation(project_id, examples_count, is_structured, output_format, json_schema):
+def start_generation(project_id, examples_count, is_structured, output_format, json_schema, model_id=None):
     """Запустить генерацию данных"""
     try:
         base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
@@ -111,7 +111,8 @@ def start_generation(project_id, examples_count, is_structured, output_format, j
                 "examples_count": examples_count,
                 "is_structured": is_structured,
                 "output_format": output_format,
-                "json_schema": json_schema if json_schema else None
+                "json_schema": json_schema if json_schema else None,
+                "model_id": model_id
             }
         }
         
@@ -150,6 +151,30 @@ def start_fine_tuning(project_id):
         st.error(f"Ошибка при запуске fine-tuning: {e}")
         if hasattr(e, 'response') and e.response is not None:
             st.error(f"Детали ошибки: {e.response.text}")
+        return None
+
+
+def get_available_models():
+    """Получить список доступных моделей LLM"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        response = requests.get(f"{base_url}/models/available")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при получении списка моделей: {e}")
+        return None
+
+
+def get_default_model():
+    """Получить модель по умолчанию"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        response = requests.get(f"{base_url}/models/default")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при получении модели по умолчанию: {e}")
         return None
 
 
@@ -207,6 +232,52 @@ def show_generation_modal(project_id, project_name):
     with st.container():
         st.subheader("🚀 Настройка генерации данных")
         st.write(f"**Проект:** {project_name}")
+        
+        # Выбор модели - выносим ЗА пределы формы для динамического обновления
+        st.subheader("🤖 Выбор модели")
+        
+        # Загружаем доступные модели
+        models_data = get_available_models()
+        selected_model_id = None
+        
+        if models_data and models_data.get("success") and models_data.get("models"):
+            models = models_data["models"]
+            
+            # Находим модель по умолчанию
+            default_model_index = 0
+            for i, model in enumerate(models):
+                if model.get("is_default", False):
+                    default_model_index = i
+                    break
+            
+            # Создаем список опций для selectbox
+            model_options = []
+            for model in models:
+                display_text = f"{model['display_name']} ({model['model_id']})"
+                if model.get("is_default", False):
+                    display_text += " [По умолчанию]"
+                model_options.append(display_text)
+            
+            selected_option = st.selectbox(
+                "Модель для генерации",
+                options=model_options,
+                index=default_model_index,
+                help="Выберите модель LLM для генерации данных",
+                key="model_selection"
+            )
+            
+            # Извлекаем model_id из выбранной опции
+            selected_index = model_options.index(selected_option)
+            selected_model_id = models[selected_index]["model_id"]
+            
+            # Показываем описание выбранной модели
+            selected_model = models[selected_index]
+            if selected_model.get("description"):
+                st.info(f"📝 {selected_model['description']}")
+        else:
+            st.warning("⚠️ Не удалось загрузить список моделей. Будет использована модель по умолчанию.")
+        
+        st.divider()
         
         # Структурированный ответ - выносим ЗА пределы формы для динамического обновления
         is_structured = st.checkbox(
@@ -289,13 +360,23 @@ def show_generation_modal(project_id, project_name):
                         examples_count,
                         is_structured,
                         output_format,
-                        json_schema
+                        json_schema,
+                        model_id=selected_model_id
                     )
                     
                     if result and result.get("success"):
                         st.success(f"✅ {result.get('message')}")
                         st.info(f"🆔 ID задачи: {result.get('task_id')}")
                         st.info(f"📋 Очередь: {result.get('queue_name')}")
+                        
+                        # Показываем информацию о выбранной модели
+                        if result.get('model_id'):
+                            st.info(f"🤖 Модель: {result.get('model_id')}")
+                        elif selected_model_id:
+                            st.info(f"🤖 Модель: {selected_model_id}")
+                        else:
+                            st.info("🤖 Модель: по умолчанию")
+                        
                         return "success"
                     else:
                         st.error("Не удалось запустить генерацию")

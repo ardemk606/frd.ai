@@ -2,7 +2,7 @@ import logging
 import concurrent.futures
 import math
 import random
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from .config import Config
@@ -30,11 +30,12 @@ logger = logging.getLogger(__name__)
 class SelfInstructProcessor:
     """Основной класс для обработки self-instruct данных"""
 
-    def __init__(self, config: Config, system_prompt_path: str):
+    def __init__(self, config: Config, system_prompt_path: str, model_id: Optional[str] = None):
         self.config = config
         self.generator = ResponseGenerator(
             system_prompt_path=system_prompt_path,
-            user_prompt_path="/app/data/prompt/data_generator_prompt.txt"
+            user_prompt_path="/app/data/prompt/data_generator_prompt.txt",
+            model_id=model_id  # Передаем модель в генератор
         )
         # Используем наш новый API вместо старых классов
         minio_client = get_minio_client()
@@ -164,6 +165,13 @@ class DataProcessor:
             if not project_id:
                 raise ValueError("project_id не указан в параметрах генерации")
             
+            # Извлекаем model_id из параметров (если указан)
+            model_id = generation_params.get('model_id')
+            if model_id:
+                logger.info(f"Используется модель: {model_id}")
+            else:
+                logger.info("Используется модель по умолчанию")
+            
             # Проверяем существование проекта через repository
             try:
                 dataset_repository = create_dataset_repository()
@@ -179,15 +187,20 @@ class DataProcessor:
             config = Config.from_env()
             config.total_results = generation_params.get('examples_count', 30)
             
-            # Запускаем процесс генерации
-            processor = SelfInstructProcessor(config, dataset.system_prompt_object_name)
+            # Запускаем процесс генерации с указанной моделью
+            processor = SelfInstructProcessor(
+                config, 
+                dataset.system_prompt_object_name, 
+                model_id=model_id  # Передаем модель в процессор
+            )
             output_file = processor.process_all(project_id)
             
             return {
                 'status': 'success',
                 'output_file': output_file,
                 'generated_count': config.total_results,
-                'project_id': project_id
+                'project_id': project_id,
+                'model_id': model_id
             }
             
         except Exception as e:

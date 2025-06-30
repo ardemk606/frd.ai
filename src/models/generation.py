@@ -12,6 +12,10 @@ class GenerationRequest(BaseModel):
     is_structured: bool = Field(description="Является ли ожидаемый ответ структурированным")
     output_format: str = Field(default="json", description="Формат вывода (пока только json)")
     json_schema: Optional[str] = Field(description="JSON-схема ожидаемого результата")
+    model_id: Optional[str] = Field(
+        default=None, 
+        description="ID модели для генерации (если не указан, используется модель по умолчанию)"
+    )
     
     @validator('output_format')
     def validate_output_format(cls, v):
@@ -23,6 +27,15 @@ class GenerationRequest(BaseModel):
     def validate_json_schema(cls, v, values):
         if values.get('is_structured') and not v:
             raise ValueError('JSON-схема обязательна для структурированного вывода')
+        return v
+    
+    @validator('model_id')
+    def validate_model_id(cls, v):
+        if v:
+            # Проверяем что модель существует
+            from shared.llm import get_model_by_id
+            if not get_model_by_id(v):
+                raise ValueError(f'Модель с ID "{v}" не найдена')
         return v
 
 
@@ -38,6 +51,7 @@ class TaskResponse(BaseModel):
     task_id: str = Field(description="ID задачи в Redis")
     message: str = Field(description="Сообщение о результате")
     queue_name: str = Field(description="Название очереди")
+    model_id: Optional[str] = Field(default=None, description="ID используемой модели")
 
 
 class GenerateRequest(BaseModel):
