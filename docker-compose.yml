@@ -187,6 +187,13 @@ services:
       cache_from:
         - python:3.11-slim
     container_name: data-generation-gpu-worker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     environment:
       # MinIO Settings
       MINIO_ENDPOINT: minio:9000
@@ -227,6 +234,10 @@ services:
       
       # Worker Settings
       WORKER_QUEUES: "gpu_queue"
+      
+      # CUDA Settings
+      CUDA_VISIBLE_DEVICES: "0"
+      TORCH_CUDA_ARCH_LIST: "7.5;8.0;8.6;8.9;9.0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -270,19 +281,22 @@ services:
       # Кеш для моделей
       TRANSFORMERS_CACHE: "/app/cache"
       HF_HOME: "/app/cache"
+      
+      # CUDA Settings
+      CUDA_VISIBLE_DEVICES: "0"
+      TORCH_CUDA_ARCH_LIST: "7.5;8.0;8.6;8.9;9.0"
     volumes:
       # Подключаем адаптеры из MinIO (если будут скачиваться локально)
       - ./adapters:/app/adapters
       # Кеш для моделей HuggingFace
       - inference_cache:/app/cache
-    # Если есть GPU, раскомментируйте:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   minio_data:
