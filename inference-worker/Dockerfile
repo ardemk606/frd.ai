@@ -28,7 +28,9 @@ RUN uv venv /opt/venv
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN uv pip install torch
+
+RUN uv pip install torch --index-url https://download.pytorch.org/whl/cu118
+
 
 # Установка остальных зависимостей (исключая torch чтобы избежать конфликтов)
 RUN grep -v "^torch" requirements.txt > requirements_clean.txt && \
