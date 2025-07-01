@@ -9,3 +9,4 @@ fastapi
 python-multipart
 redis
 celery
+websockets

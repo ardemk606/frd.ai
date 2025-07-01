@@ -254,7 +254,38 @@ services:
     environment:
       - API_BASE_URL=http://app:7777
 
+  # Inference Worker для плейграунда
+  inference-worker:
+    build:
+      context: ./inference-worker
+      dockerfile: Dockerfile
+    container_name: inference-worker
+    ports:
+      - "8765:8765"
+    environment:
+      # Модель по умолчанию
+      INFERENCE_MODEL_NAME: "Qwen/Qwen3-0.6B"
+      INFERENCE_HOST: "0.0.0.0"
+      INFERENCE_PORT: "8765"
+      # Кеш для моделей
+      TRANSFORMERS_CACHE: "/app/cache"
+      HF_HOME: "/app/cache"
+    volumes:
+      # Подключаем адаптеры из MinIO (если будут скачиваться локально)
+      - ./adapters:/app/adapters
+      # Кеш для моделей HuggingFace
+      - inference_cache:/app/cache
+    # Если есть GPU, раскомментируйте:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
 volumes:
   minio_data:
   postgres_data:
-  redis_data: 
+  redis_data:
+  inference_cache: 
