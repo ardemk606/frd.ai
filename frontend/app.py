@@ -23,6 +23,8 @@ if "selected_project_id" not in st.session_state:
     st.session_state.selected_project_id = None
 if "show_generation_modal" not in st.session_state:
     st.session_state.show_generation_modal = False
+if "show_fine_tuning_modal" not in st.session_state:
+    st.session_state.show_fine_tuning_modal = False
 
 # API клиент
 def upload_dataset(uploaded_file, system_prompt):
@@ -167,6 +169,31 @@ def start_fine_tuning(project_id):
         f"/projects/{project_id}/start_fine_tuning",
         "Ошибка при запуске fine-tuning"
     )
+
+
+def start_fine_tuning_with_settings(project_id, use_llm_judge=True, judge_model_id=None, base_model_name=None, n_trials=20):
+    """Запустить LoRA fine-tuning с настройками"""
+    try:
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        
+        payload = {
+            "project_id": project_id,
+            "fine_tuning_params": {
+                "use_llm_judge": use_llm_judge,
+                "judge_model_id": judge_model_id,
+                "base_model_name": base_model_name,
+                "n_trials": n_trials
+            }
+        }
+        
+        response = requests.post(f"{base_url}/projects/{project_id}/start_fine_tuning", json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        st.error(f"Ошибка при запуске fine-tuning: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            st.error(f"Детали ошибки: {e.response.text}")
+        return None
 
 
 def get_available_models():
@@ -457,6 +484,136 @@ def show_generation_modal(project_id, project_name):
     return None
 
 
+def show_fine_tuning_modal(project_id, project_name):
+    """Отобразить модальное окно для настройки fine-tuning"""
+    
+    with st.container():
+        st.subheader("🔥 Настройка LoRA Fine-tuning")
+        st.write(f"**Проект:** {project_name}")
+        
+        # LLM Judge настройки - выносим ЗА пределы формы для динамического обновления
+        st.subheader("🧠 LLM Judge")
+        
+        use_llm_judge = st.checkbox(
+            "Включить LLM Judge для оценки качества",
+            value=True,
+            help="LLM Judge использует дополнительную языковую модель для оценки качества сгенерированных ответов. "
+                 "Это повышает точность оценки, но увеличивает время и стоимость обучения.",
+            key="use_llm_judge_checkbox"
+        )
+        
+        # Модель для LLM Judge - показываем только если LLM Judge включен
+        judge_model_id = None
+        if use_llm_judge:
+            # Загружаем доступные модели
+            models_data = get_available_models()
+            
+            if models_data and models_data.get("success") and models_data.get("models"):
+                models = models_data["models"]
+                
+                # Создаем список опций для selectbox
+                model_options = ["По умолчанию"]
+                model_options.extend([f"{model['display_name']} ({model['model_id']})" for model in models])
+                
+                selected_judge_option = st.selectbox(
+                    "Модель для LLM Judge",
+                    options=model_options,
+                    index=0,
+                    help="Выберите модель LLM для оценки качества обученной модели",
+                    key="judge_model_selection"
+                )
+                
+                # Извлекаем model_id из выбранной опции
+                if selected_judge_option != "По умолчанию":
+                    selected_index = model_options.index(selected_judge_option) - 1  # -1 из-за "По умолчанию"
+                    judge_model_id = models[selected_index]["model_id"]
+            else:
+                st.info("Будет использована модель LLM Judge по умолчанию")
+        else:
+            st.info("LLM Judge выключен. Будет использоваться только BERTScore для оценки качества.")
+        
+        st.divider()
+        
+        # Базовая модель для дообучения
+        st.subheader("🤖 Базовая модель")
+        
+        base_model_name = st.text_input(
+            "Название базовой модели",
+            value="",
+            placeholder="Например: Qwen/Qwen3-0.6B (оставьте пустым для модели по умолчанию)",
+            help="HuggingFace название модели для дообучения. Если не указано, будет использована модель по умолчанию.",
+            key="base_model_input"
+        )
+        
+        st.divider()
+        
+        with st.form("fine_tuning_form"):
+            # Количество попыток байесовской оптимизации
+            n_trials = st.number_input(
+                "Количество попыток байесовской оптимизации",
+                min_value=5,
+                max_value=100,
+                value=20,
+                help="Количество итераций для поиска лучших гиперпараметров. Больше попыток = лучший результат, но дольше обучение."
+            )
+            
+            # Информационные блоки
+            if use_llm_judge:
+                st.info("✅ LLM Judge включен: качество модели будет оцениваться через BERTScore + дополнительную языковую модель")
+            else:
+                st.warning("⚠️ LLM Judge выключен: качество модели будет оцениваться только через BERTScore")
+            
+            st.info(f"🔄 Будет выполнено {n_trials} попыток оптимизации для поиска лучших параметров LoRA")
+            
+            if base_model_name.strip():
+                st.info(f"🎯 Базовая модель: {base_model_name.strip()}")
+            else:
+                st.info("🎯 Базовая модель: по умолчанию")
+            
+            # Кнопки действий
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                submitted = st.form_submit_button("🚀 Запустить fine-tuning", use_container_width=True, type="primary")
+            
+            with col2:
+                cancelled = st.form_submit_button("❌ Отмена", use_container_width=True)
+            
+            if submitted:
+                # Запуск fine-tuning с настройками
+                with st.spinner("Запускаем fine-tuning..."):
+                    result = start_fine_tuning_with_settings(
+                        project_id,
+                        use_llm_judge=use_llm_judge,
+                        judge_model_id=judge_model_id,
+                        base_model_name=base_model_name.strip() if base_model_name.strip() else None,
+                        n_trials=n_trials
+                    )
+                    
+                    if result and result.get("success"):
+                        st.success(f"✅ {result.get('message')}")
+                        st.info(f"🆔 ID задачи: {result.get('task_id')}")
+                        st.info(f"📋 Очередь: {result.get('queue_name')}")
+                        
+                        # Показываем информацию о настройках
+                        st.info(f"⚙️ LLM Judge: {'включен' if use_llm_judge else 'выключен'}")
+                        if use_llm_judge and judge_model_id:
+                            st.info(f"🧠 Модель для LLM Judge: {judge_model_id}")
+                        if base_model_name.strip():
+                            st.info(f"🤖 Базовая модель: {base_model_name.strip()}")
+                        st.info(f"🔄 Попыток оптимизации: {n_trials}")
+                        
+                        return "success"
+                    else:
+                        st.error("Не удалось запустить fine-tuning")
+                        return None
+            
+            if cancelled:
+                return "cancelled"
+    
+    return None
+
+
 # Заголовок
 st.title("⚡ FRD.ai - From Raw Data to AI")
 
@@ -487,6 +644,7 @@ with st.sidebar:
             st.session_state.current_page = "Все проекты"
             st.session_state.selected_project_id = None
             st.session_state.show_generation_modal = False
+            st.session_state.show_fine_tuning_modal = False
             st.rerun()
 
 # Основное содержимое страниц
@@ -747,17 +905,26 @@ elif st.session_state.current_page == "Детали проекта":
             
             # Если статус READY_FOR_FINE_TUNING - показываем кнопку fine-tuning
             elif project['status'] == 'READY_FOR_FINE_TUNING':
-                if st.button("🔥 Запустить LoRA Fine-tuning", key="start_fine_tuning", use_container_width=True, type="primary"):
-                    with st.spinner("Запускаем LoRA дообучение..."):
-                        result = start_fine_tuning(st.session_state.selected_project_id)
-                        
-                        if result and result.get("success"):
-                            st.success(f"✅ {result.get('message')}")
-                            st.info(f"🆔 ID задачи: {result.get('task_id')}")
-                            st.info(f"📋 Очередь: {result.get('queue_name')}")
-                            st.rerun()  # Обновляем страницу чтобы показать новый статус
-                        else:
-                            st.error("Не удалось запустить fine-tuning")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔥 Настроить Fine-tuning", key="setup_fine_tuning", use_container_width=True, type="primary"):
+                        st.session_state.show_fine_tuning_modal = True
+                        st.rerun()
+                
+                with col2:
+                    if st.button("⚡ Быстрый запуск", key="quick_fine_tuning", use_container_width=True):
+                        with st.spinner("Запускаем LoRA дообучение с настройками по умолчанию..."):
+                            result = start_fine_tuning(st.session_state.selected_project_id)
+                            
+                            if result and result.get("success"):
+                                st.success(f"✅ {result.get('message')}")
+                                st.info(f"🆔 ID задачи: {result.get('task_id')}")
+                                st.info(f"📋 Очередь: {result.get('queue_name')}")
+                                st.info("⚙️ Используются настройки по умолчанию: LLM Judge включен, 20 попыток оптимизации")
+                                st.rerun()  # Обновляем страницу чтобы показать новый статус
+                            else:
+                                st.error("Не удалось запустить fine-tuning")
             
             else:
                 # Для остальных статусов - простой переход
@@ -783,6 +950,18 @@ elif st.session_state.current_page == "Детали проекта":
                 st.rerun()  # Обновляем страницу чтобы показать новый статус
             elif modal_result == "cancelled":
                 st.session_state.show_generation_modal = False
+                st.rerun()
+        
+        # Модальное окно для fine-tuning
+        if st.session_state.show_fine_tuning_modal:
+            st.divider()
+            modal_result = show_fine_tuning_modal(project['id'], project['name'])
+            
+            if modal_result == "success":
+                st.session_state.show_fine_tuning_modal = False
+                st.rerun()  # Обновляем страницу чтобы показать новый статус
+            elif modal_result == "cancelled":
+                st.session_state.show_fine_tuning_modal = False
                 st.rerun()
     
     else:

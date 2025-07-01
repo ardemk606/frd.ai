@@ -69,7 +69,17 @@ def generate_dataset_task(self, generation_params):
 
 
 @celery_app.task(bind=True, name='tasks.fine_tune_lora_task')
-def fine_tune_lora_task(self, dataset_id: int, output_dir: str = None, model_name: str = None):
+def fine_tune_lora_task(
+    self, 
+    dataset_id: int = None,
+    output_dir: str = None, 
+    model_name: str = None,
+    use_llm_judge: bool = True,
+    judge_model_id: str = None,
+    base_model_name: str = None,
+    n_trials: int = 20,
+    **kwargs  # Для обратной совместимости
+):
     """
     Задача LoRA дообучения с байесовской оптимизацией.
     
@@ -78,15 +88,33 @@ def fine_tune_lora_task(self, dataset_id: int, output_dir: str = None, model_nam
     Args:
         dataset_id: ID датасета для дообучения.
         output_dir: Директория для сохранения результатов.
-        model_name: Название модели для дообучения.
+        model_name: Название модели для дообучения (устарел, используйте base_model_name).
+        use_llm_judge: Использовать ли LLM Judge для оценки качества.
+        judge_model_id: ID модели для LLM Judge.
+        base_model_name: Название базовой модели для дообучения.
+        n_trials: Количество попыток байесовской оптимизации.
     """
     dataset_path = None
     try:
-        # Защита от передачи параметра в виде словаря
+        # Защита от передачи параметра в виде словаря (обратная совместимость)
         if isinstance(dataset_id, dict):
-            dataset_id = dataset_id.get('dataset_id')
+            # Старый формат вызова
+            kwargs_data = dataset_id
+            dataset_id = kwargs_data.get('dataset_id')
+            use_llm_judge = kwargs_data.get('use_llm_judge', True)
+            judge_model_id = kwargs_data.get('judge_model_id')
+            base_model_name = kwargs_data.get('base_model_name')
+            n_trials = kwargs_data.get('n_trials', 20)
+
+        # Определяем финальное название модели (обратная совместимость)
+        final_model_name = base_model_name or model_name
 
         logger.info(f"Начинаю LoRA дообучение для датасета id={dataset_id}")
+        logger.info(f"Параметры: LLM Judge={'включен' if use_llm_judge else 'выключен'}, "
+                    f"judge_model={judge_model_id or 'по умолчанию'}, "
+                    f"base_model={final_model_name or 'по умолчанию'}, "
+                    f"n_trials={n_trials}")
+        
         self.update_state(state='PROGRESS', meta={'status': 'Получение данных...'})
 
         # Шаг 1: Получаем имя объекта датасета из БД
@@ -124,19 +152,40 @@ def fine_tune_lora_task(self, dataset_id: int, output_dir: str = None, model_nam
         from lora.lora_tuning import LoRATuner, LoRATuningConfig
         
         config = LoRATuningConfig.from_env()
-        tuner = LoRATuner(config=config)
+        # Переопределяем n_trials из параметров задачи
+        config.n_trials = n_trials
+        
+        # Создаем tuner с настройками LLM Judge
+        tuner = LoRATuner(
+            config=config, 
+            judge_model_id=judge_model_id if use_llm_judge else None,
+            use_llm_judge=use_llm_judge
+        )
         
         final_output_dir = output_dir or f"/app/lora_results/{dataset_id}"
-        self.update_state(state='PROGRESS', meta={'status': f'Запуск оптимизации, результаты в {final_output_dir}'})
+        self.update_state(state='PROGRESS', meta={
+            'status': f'Запуск оптимизации, результаты в {final_output_dir}',
+            'use_llm_judge': use_llm_judge,
+            'n_trials': n_trials
+        })
         
         results = tuner.run_optimization(
             data_path=dataset_path,
             output_dir=final_output_dir,
-            model_name=model_name,
+            model_name=final_model_name,
             system_prompt=system_prompt
         )
         
         logger.info(f"LoRA дообучение успешно завершено для датасета {dataset_id}.")
+        
+        # Добавляем информацию о настройках в результат
+        results['settings'] = {
+            'use_llm_judge': use_llm_judge,
+            'judge_model_id': judge_model_id,
+            'base_model_name': final_model_name,
+            'n_trials': n_trials
+        }
+        
         self.update_state(state='SUCCESS', meta=results)
         
         return results
