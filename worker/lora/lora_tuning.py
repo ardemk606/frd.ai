@@ -70,10 +70,31 @@ def setup_lora_model(model, lora_params: Dict[str, Any]):
     if hasattr(model, 'peft_config') and model.peft_config:
         logger.info("Найдены существующие PEFT адаптеры, выгружаем их...")
         try:
-            model = model.unload()
-            logger.info("PEFT адаптеры успешно выгружены")
+            # Для некоторых моделей нужно использовать merge_and_unload
+            if hasattr(model, 'merge_and_unload'):
+                model = model.merge_and_unload()
+                logger.info("PEFT адаптеры успешно объединены и выгружены")
+            elif hasattr(model, 'unload'):
+                model = model.unload()
+                logger.info("PEFT адаптеры успешно выгружены")
+            else:
+                # Принудительно очищаем peft_config
+                logger.warning("Метод unload не найден, принудительно очищаем PEFT конфигурацию")
+                if hasattr(model, 'peft_config'):
+                    model.peft_config = {}
+                if hasattr(model, 'peft_modules'):
+                    model.peft_modules = {}
         except Exception as e:
             logger.warning(f"Не удалось выгрузить PEFT адаптеры: {e}")
+            # Принудительная очистка как fallback
+            try:
+                if hasattr(model, 'peft_config'):
+                    model.peft_config = {}
+                if hasattr(model, 'peft_modules'):
+                    model.peft_modules = {}
+                logger.info("Выполнена принудительная очистка PEFT конфигурации")
+            except Exception as cleanup_error:
+                logger.error(f"Не удалось очистить PEFT конфигурацию: {cleanup_error}")
     
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -148,22 +169,15 @@ def prepare_dataset(data: List[Dict[str, str]], tokenizer, system_prompt: str = 
     return tokenized_dataset
 
 def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], output_dir: str, config: LoRATuningConfig = None):
-    """Дообучает модель с LoRA
+    """Запускает LoRA дообучение"""
+    # Используем конфигурацию или создаем по умолчанию
+    if config is None:
+        config = LoRATuningConfig.from_env()
     
-    Args:
-        model: Базовая модель
-        tokenizer: Токенизатор
-        dataset: Подготовленный датасет
-        lora_params: Параметры LoRA (rank, alpha, dropout, learning_rate)
-        output_dir: Директория для сохранения
-        config: Конфигурация обучения
-    """
-    logger.info(f"Начинаем дообучение LoRA в {output_dir}")
-    
-    # Создаем PEFT модель
+    # Настраиваем LoRA
     peft_model = setup_lora_model(model, lora_params)
     
-    # Настройки обучения
+    # Настраиваем параметры обучения используя конфигурацию
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=config.num_train_epochs,
@@ -180,29 +194,13 @@ def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], outpu
         label_names=["labels"],  # Явно указываем колонку с ответами
     )
     
-    # Создаем тренер с совместимым API
-    import inspect
-    trainer_signature = inspect.signature(Trainer.__init__)
-    
-    if 'processing_class' in trainer_signature.parameters:
-        # Новая версия transformers - используем processing_class
-        trainer = Trainer(
-            model=peft_model,
-            args=training_args,
-            train_dataset=dataset,
-            processing_class=tokenizer,
-        )
-    else:
-        # Старая версия transformers - используем tokenizer 
-        import warnings
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=FutureWarning, message=".*tokenizer.*deprecated.*")
-            trainer = Trainer(
-                model=peft_model,
-                args=training_args,
-                train_dataset=dataset,
-                tokenizer=tokenizer,
-            )
+    # Создаем тренер
+    trainer = Trainer(
+        model=peft_model,
+        args=training_args,
+        train_dataset=dataset,
+        tokenizer=tokenizer,
+    )
     
     # Запускаем обучение
     trainer.train()
@@ -213,97 +211,15 @@ def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], outpu
     return peft_model
 
 
-def safe_unload_peft_adapters(model):
-    """Безопасно выгружает PEFT адаптеры из модели"""
-    try:
-        # Проверяем наличие PEFT конфигурации
-        if not hasattr(model, 'peft_config') or not model.peft_config:
-            logger.debug("Модель не содержит PEFT адаптеры")
-            return model
-            
-        logger.info("Найдены PEFT адаптеры, пытаемся их выгрузить...")
-        
-        # Пробуем различные методы выгрузки адаптеров
-        if hasattr(model, 'unload_and_optionally_merge'):
-            logger.info("Выгружаем PEFT адаптеры методом unload_and_optionally_merge()")
-            base_model = model.unload_and_optionally_merge(merge=False)
-            return base_model
-            
-        elif hasattr(model, 'merge_and_unload'):
-            logger.info("Выгружаем PEFT адаптеры методом merge_and_unload()")
-            base_model = model.merge_and_unload()
-            return base_model
-            
-        elif hasattr(model, 'unload'):
-            logger.info("Выгружаем PEFT адаптеры методом unload()")
-            model.unload()
-            return model
-            
-        elif hasattr(model, 'disable_adapters'):
-            logger.info("Отключаем PEFT адаптеры методом disable_adapters()")
-            model.disable_adapters()
-            return model
-            
-        else:
-            # Последний вариант - получаем базовую модель напрямую
-            if hasattr(model, 'base_model') and hasattr(model.base_model, 'model'):
-                logger.info("Получаем базовую модель напрямую через base_model.model")
-                return model.base_model.model
-            elif hasattr(model, 'model'):
-                logger.info("Получаем базовую модель напрямую через model")
-                return model.model
-            else:
-                logger.warning("Не найден способ выгрузки PEFT адаптеров, продолжаем с текущей моделью")
-                return model
-                
-    except Exception as e:
-        logger.warning(f"Не удалось выгрузить PEFT адаптеры: {e}")
-        return model
-
-
-def cleanup_peft_model(peft_model):
-    """Полная очистка PEFT модели и освобождение памяти"""
-    try:
-        # Выгружаем адаптеры (но не присваиваем результат, так как модель будет удалена)
-        try:
-            safe_unload_peft_adapters(peft_model)
-        except Exception as unload_error:
-            logger.warning(f"Ошибка при выгрузке адаптеров: {unload_error}")
-        
-        # Перемещаем модель на CPU для освобождения GPU памяти
-        try:
-            if hasattr(peft_model, 'cpu'):
-                peft_model.cpu()
-        except Exception as cpu_error:
-            logger.warning(f"Ошибка при перемещении модели на CPU: {cpu_error}")
-        
-        # Удаляем ссылки
-        del peft_model
-        
-        # Принудительная очистка памяти
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-        
-        import gc
-        gc.collect()
-        
-        logger.debug("PEFT модель очищена из памяти")
-        
-    except Exception as e:
-        logger.warning(f"Ошибка при очистке PEFT модели: {e}")
-
-
 class LoRATuner:
     """Основной класс для дообучения LoRA с байесовской оптимизацией"""
     
-    def __init__(self, config: LoRATuningConfig = None, judge_model_id: str = None, use_llm_judge: bool = True, enable_mlflow: bool = None):
+    def __init__(self, config: LoRATuningConfig = None, judge_model_id: str = None, use_llm_judge: bool = True):
         """
         Args:
             config: Конфигурация для дообучения
             judge_model_id: ID модели для LLM Judge оценки
             use_llm_judge: Использовать ли LLM Judge для оценки (по умолчанию True)
-            enable_mlflow: Включить ли MLflow трекинг (если None, читается из env)
         """
         self.config = config or LoRATuningConfig.from_env()
         self.use_llm_judge = use_llm_judge
@@ -317,33 +233,12 @@ class LoRATuner:
             self.evaluator = ModelEvaluator(judge_model_id=None, use_llm_judge=False)
             logger.info("LLM Judge выключен, будет использоваться только BERTScore")
         
-        # Инициализация MLflow трекера
-        try:
-            from .mlflow_tracker import create_mlflow_tracker
-            self.mlflow_tracker = create_mlflow_tracker(enabled=enable_mlflow)
-            if self.mlflow_tracker.enabled:
-                logger.info("MLflow трекинг включен для эксперимента")
-            else:
-                logger.info("MLflow трекинг отключен")
-        except ImportError:
-            logger.info("MLflow трекер недоступен")
-            self.mlflow_tracker = None
-        
         self.model = None
         self.tokenizer = None
         self.dataset = None
         self.validation_data = None
         self.system_prompt = None
         
-        # Для отслеживания экспериментов
-        self.experiment_metadata = {
-            "dataset_size": 0,
-            "validation_size": 0,
-            "model_name": None,
-            "use_llm_judge": use_llm_judge,
-            "judge_model_id": judge_model_id
-        }
-
     def load_data(self, data_path: str, model_name: str = None, system_prompt: str = None) -> None:
         """Загружает данные для обучения
         
@@ -394,27 +289,14 @@ class LoRATuner:
         # Получаем параметры от оптимизатора
         lora_params = self.optimizer.suggest_lora_params(trial)
         
-        # Переменная для отслеживания PEFT модели
-        peft_model = None
-        
         # Создаем временную директорию для сохранения адаптера
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
                 logger.info(f"Trial {trial.number}: Начинаем обучение с параметрами {lora_params}")
                 
-                # Создаем чистую копию базовой модели для нового trial'а
-                # Важно: не модифицируем self.model, а работаем с копией
-                current_model = self.model
-                
-                # Проверяем, есть ли уже PEFT адаптеры в базовой модели
-                if hasattr(current_model, 'peft_config') and current_model.peft_config:
-                    logger.info("Найдены существующие PEFT адаптеры, создаем чистую копию базовой модели...")
-                    # Получаем чистую базовую модель без изменения self.model
-                    current_model = safe_unload_peft_adapters(current_model)
-                
                 # Дообучаем модель
                 peft_model = fine_tune_lora(
-                    current_model, 
+                    self.model, 
                     self.tokenizer, 
                     self.dataset, 
                     lora_params, 
@@ -432,53 +314,35 @@ class LoRATuner:
                 
                 logger.info(f"Trial {trial.number}: params={lora_params}, BERTScore={bert_score:.4f}")
                 
-                # Логируем trial в MLflow
-                if self.mlflow_tracker and self.mlflow_tracker.enabled:
-                    trial_metrics = {
-                        "bert_score": bert_score,
-                        "trial_score": bert_score  # Основная метрика для оптимизации
-                    }
-                    
-                    # Добавляем дополнительные метрики если есть
-                    if hasattr(peft_model, 'training_logs'):
-                        trial_metrics.update(peft_model.training_logs)
-                    
-                    self.mlflow_tracker.log_bayesian_trial(
-                        trial_number=trial.number,
-                        trial_params=lora_params,
-                        trial_metrics=trial_metrics,
-                        model_path=temp_dir if os.path.exists(temp_dir) else None
-                    )
+                # Принудительно очищаем PEFT модель после оценки
+                try:
+                    if hasattr(peft_model, 'merge_and_unload'):
+                        # Сливаем веса обратно в базовую модель и очищаем PEFT
+                        self.model = peft_model.merge_and_unload()
+                        logger.debug(f"Trial {trial.number}: PEFT адаптер объединен с базовой моделью")
+                    elif hasattr(peft_model, 'unload'):
+                        self.model = peft_model.unload()
+                        logger.debug(f"Trial {trial.number}: PEFT адаптер выгружен")
+                    else:
+                        # Fallback: принудительная очистка
+                        if hasattr(self.model, 'peft_config'):
+                            self.model.peft_config = {}
+                        if hasattr(self.model, 'peft_modules'):
+                            self.model.peft_modules = {}
+                        logger.debug(f"Trial {trial.number}: Выполнена принудительная очистка PEFT")
+                except Exception as cleanup_error:
+                    logger.warning(f"Trial {trial.number}: Ошибка при очистке PEFT: {cleanup_error}")
                 
                 return bert_score
                 
             except Exception as e:
                 logger.error(f"Ошибка в trial {trial.number}: {e}", exc_info=True)
-                
-                # Логируем неудачный trial в MLflow
-                if self.mlflow_tracker and self.mlflow_tracker.enabled:
-                    self.mlflow_tracker.log_bayesian_trial(
-                        trial_number=trial.number,
-                        trial_params=lora_params,
-                        trial_metrics={"error": 1.0, "bert_score": 0.0}
-                    )
-                
                 return 0.0
             finally:
-                # Критически важно: очищаем PEFT модель после каждого trial
-                if peft_model is not None:
-                    cleanup_peft_model(peft_model)
-                
-                # Дополнительная очистка памяти GPU
+                # Освобождаем память CUDA после каждого trial
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                
-                # Принудительная сборка мусора
-                import gc
-                gc.collect()
-                
-                logger.debug(f"Trial {trial.number}: память очищена")
+                    logger.debug(f"Trial {trial.number}: CUDA кэш очищен")
     
     def run_optimization(self, data_path: str, output_dir: str = "./lora_results", model_name: str = None, system_prompt: str = None) -> Dict[str, Any]:
         """Запускает полный цикл оптимизации и дообучения
@@ -493,16 +357,6 @@ class LoRATuner:
         
         # Загружаем данные
         self.load_data(data_path, model_name, system_prompt)
-        
-        # Обновляем метаданные эксперимента
-        self.experiment_metadata.update({
-            "dataset_size": len(self.dataset),
-            "validation_size": len(self.validation_data),
-            "model_name": model_name or self.config.model_name,
-            "data_path": data_path,
-            "output_dir": output_dir,
-            "n_trials": self.config.n_trials
-        })
         
         # Запускаем байесовскую оптимизацию
         logger.info(f"Запускаем оптимизацию на {self.config.n_trials} попыток...")
@@ -542,14 +396,7 @@ class LoRATuner:
         
         logger.info(f"Финальные метрики:")
         logger.info(f"  BERTScore: {detailed_metrics['bert_score']:.4f}")
-        
-        # Безопасное логирование LLM Judge score
-        llm_judge_score = detailed_metrics.get('llm_judge_score')
-        if llm_judge_score is not None:
-            logger.info(f"  LLM Judge: {llm_judge_score:.2f}/100")
-        else:
-            logger.info("  LLM Judge: выключен")
-            
+        logger.info(f"  LLM Judge: {detailed_metrics['llm_judge_score']:.2f}/100")
         logger.info(f"  Combined: {detailed_metrics['combined_score']:.4f}")
         
         # Сохраняем результаты
@@ -557,34 +404,11 @@ class LoRATuner:
             'best_params': best_params,
             'output_dir': output_dir,
             'n_trials': self.config.n_trials,
-            'metrics': detailed_metrics,
-            'experiment_metadata': self.experiment_metadata
+            'metrics': detailed_metrics
         }
         
-        # Логируем финальную модель в MLflow
-        if self.mlflow_tracker and self.mlflow_tracker.enabled:
-            optimization_results = {
-                **results,
-                "best_score": detailed_metrics['combined_score']
-            }
-            
-            self.mlflow_tracker.log_final_model(
-                best_params=best_params,
-                final_metrics=detailed_metrics,
-                model_path=output_dir,
-                optimization_results=optimization_results
-            )
-            
-            # Получаем URL для просмотра в MLflow UI
-            mlflow_url = self.mlflow_tracker.get_run_url()
-            if mlflow_url:
-                logger.info(f"MLflow эксперимент доступен по ссылке: {mlflow_url}")
-                results['mlflow_url'] = mlflow_url
-        
         with open(os.path.join(output_dir, 'optimization_results.json'), 'w') as f:
-            # Создаем копию без experiment_metadata для JSON serialization
-            json_results = {k: v for k, v in results.items() if k != 'experiment_metadata'}
-            json.dump(json_results, f, indent=2)
+            json.dump(results, f, indent=2)
         
         logger.info(f"Дообучение завершено! Результаты сохранены в {output_dir}")
         return results

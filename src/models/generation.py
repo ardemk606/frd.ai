@@ -40,25 +40,24 @@ class GenerationRequest(BaseModel):
 
 
 class FineTuningRequest(BaseModel):
-    """Параметры для LoRA fine-tuning"""
-    use_llm_judge: bool = Field(default=True, description="Использовать ли LLM Judge для оценки")
+    """Запрос на запуск LoRA fine-tuning"""
+    use_llm_judge: bool = Field(
+        default=True, 
+        description="Использовать ли LLM Judge для оценки качества модели"
+    )
     judge_model_id: Optional[str] = Field(
         default=None,
         description="ID модели для LLM Judge (если не указан, используется модель по умолчанию)"
     )
     base_model_name: Optional[str] = Field(
         default=None,
-        description="Название базовой модели для дообучения (если не указано, используется модель по умолчанию)"
+        description="Название базовой модели для дообучения (если не указан, используется модель по умолчанию)"
     )
-    n_trials: int = Field(
+    n_trials: Optional[int] = Field(
         default=20,
-        ge=1,
+        ge=5,
         le=100,
         description="Количество попыток байесовской оптимизации"
-    )
-    enable_mlflow: Optional[bool] = Field(
-        default=None,
-        description="Включить MLflow трекинг (если None, читается из переменных окружения)"
     )
     
     @validator('judge_model_id')

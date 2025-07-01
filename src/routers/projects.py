@@ -437,8 +437,7 @@ async def start_fine_tuning(
             "use_llm_judge": fine_tuning_params.use_llm_judge,
             "judge_model_id": fine_tuning_params.judge_model_id,
             "base_model_name": fine_tuning_params.base_model_name,
-            "n_trials": fine_tuning_params.n_trials,
-            "enable_mlflow": fine_tuning_params.enable_mlflow if fine_tuning_params.enable_mlflow is not None else False
+            "n_trials": fine_tuning_params.n_trials
         }
 
         # 4. Отправляем задачу в очередь GPU

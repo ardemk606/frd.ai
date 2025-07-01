@@ -171,7 +171,7 @@ def start_fine_tuning(project_id):
     )
 
 
-def start_fine_tuning_with_settings(project_id, use_llm_judge=True, judge_model_id=None, base_model_name=None, n_trials=20, enable_mlflow=False):
+def start_fine_tuning_with_settings(project_id, use_llm_judge=True, judge_model_id=None, base_model_name=None, n_trials=20):
     """Запустить LoRA fine-tuning с настройками"""
     try:
         base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
@@ -182,25 +182,17 @@ def start_fine_tuning_with_settings(project_id, use_llm_judge=True, judge_model_
                 "use_llm_judge": use_llm_judge,
                 "judge_model_id": judge_model_id,
                 "base_model_name": base_model_name,
-                "n_trials": n_trials,
-                "enable_mlflow": enable_mlflow
+                "n_trials": n_trials
             }
         }
         
-        response = requests.post(
-            f"{base_url}/projects/{project_id}/start_fine_tuning",
-            json=payload,
-            timeout=10
-        )
-        
+        response = requests.post(f"{base_url}/projects/{project_id}/start_fine_tuning", json=payload)
         response.raise_for_status()
         return response.json()
-        
-    except requests.exceptions.RequestException as e:
+    except requests.RequestException as e:
         st.error(f"Ошибка при запуске fine-tuning: {e}")
-        return None
-    except Exception as e:
-        st.error(f"Неожиданная ошибка: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            st.error(f"Детали ошибки: {e.response.text}")
         return None
 
 
@@ -565,20 +557,6 @@ def show_fine_tuning_modal(project_id, project_name):
                 help="Количество итераций для поиска лучших гиперпараметров. Больше попыток = лучший результат, но дольше обучение."
             )
             
-            # Настройки MLflow
-            st.subheader("📊 MLflow отслеживание экспериментов")
-            enable_mlflow = st.checkbox(
-                "Включить MLflow для отслеживания метрик и артефактов",
-                value=False,
-                help="MLflow будет записывать метрики каждого trial'а, параметры оптимизации и сохранять модели. "
-                     "Требует настроенного MLflow сервера (можно отключить если MLflow не установлен)."
-            )
-            
-            if enable_mlflow:
-                st.info("✅ MLflow включен: все метрики и артефакты будут записаны для дальнейшего анализа")
-            else:
-                st.info("ℹ️ MLflow отключен: метрики будут видны только в логах")
-            
             # Информационные блоки
             if use_llm_judge:
                 st.info("✅ LLM Judge включен: качество модели будет оцениваться через BERTScore + дополнительную языковую модель")
@@ -609,8 +587,7 @@ def show_fine_tuning_modal(project_id, project_name):
                         use_llm_judge=use_llm_judge,
                         judge_model_id=judge_model_id,
                         base_model_name=base_model_name.strip() if base_model_name.strip() else None,
-                        n_trials=n_trials,
-                        enable_mlflow=enable_mlflow
+                        n_trials=n_trials
                     )
                     
                     if result and result.get("success"):
@@ -625,7 +602,6 @@ def show_fine_tuning_modal(project_id, project_name):
                         if base_model_name.strip():
                             st.info(f"🤖 Базовая модель: {base_model_name.strip()}")
                         st.info(f"🔄 Попыток оптимизации: {n_trials}")
-                        st.info(f"📊 MLflow: {'включен' if enable_mlflow else 'выключен'}")
                         
                         return "success"
                     else:
