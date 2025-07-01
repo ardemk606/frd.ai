@@ -39,10 +39,47 @@ class GenerationRequest(BaseModel):
         return v
 
 
+class FineTuningRequest(BaseModel):
+    """Запрос на запуск LoRA fine-tuning"""
+    use_llm_judge: bool = Field(
+        default=True, 
+        description="Использовать ли LLM Judge для оценки качества модели"
+    )
+    judge_model_id: Optional[str] = Field(
+        default=None,
+        description="ID модели для LLM Judge (если не указан, используется модель по умолчанию)"
+    )
+    base_model_name: Optional[str] = Field(
+        default=None,
+        description="Название базовой модели для дообучения (если не указан, используется модель по умолчанию)"
+    )
+    n_trials: Optional[int] = Field(
+        default=20,
+        ge=5,
+        le=100,
+        description="Количество попыток байесовской оптимизации"
+    )
+    
+    @validator('judge_model_id')
+    def validate_judge_model_id(cls, v, values):
+        if v and values.get('use_llm_judge'):
+            # Проверяем что модель существует только если LLM Judge включен
+            from shared.llm import get_model_by_id
+            if not get_model_by_id(v):
+                raise ValueError(f'Модель для LLM Judge с ID "{v}" не найдена')
+        return v
+
+
 class GenerationTaskRequest(BaseModel):
     """Запрос на создание задачи генерации"""
     project_id: int = Field(description="ID проекта")
     generation_params: GenerationRequest = Field(description="Параметры генерации")
+
+
+class FineTuningTaskRequest(BaseModel):
+    """Запрос на создание задачи fine-tuning"""
+    project_id: int = Field(description="ID проекта")
+    fine_tuning_params: FineTuningRequest = Field(description="Параметры fine-tuning")
 
 
 class TaskResponse(BaseModel):

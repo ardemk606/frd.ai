@@ -4,12 +4,12 @@
 import logging
 import json
 import os
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from celery import Celery
 
-from ..models.generation import GenerationTaskRequest, TaskResponse
+from ..models.generation import GenerationTaskRequest, TaskResponse, FineTuningTaskRequest
 
 from ..models.projects import (
     ProjectsShortInfoResponse, 
@@ -406,6 +406,7 @@ def start_generation(
 @router.post("/{project_id}/start_fine_tuning")
 async def start_fine_tuning(
     project_id: int,
+    request_body: Optional[FineTuningTaskRequest] = None,
     dataset_repository: DatasetRepository = Depends(get_dataset_repository),
     status_service: DatasetStatusService = Depends(get_dataset_status_service)
 ):
@@ -422,15 +423,36 @@ async def start_fine_tuning(
         # 2. Обновляем статус
         status_service.set_status(project_id, "FINE_TUNING")
 
-        # 3. Отправляем задачу в очередь GPU
+        # 3. Подготавливаем параметры для задачи
+        # Если запрос не передан, используем настройки по умолчанию
+        if request_body:
+            fine_tuning_params = request_body.fine_tuning_params
+        else:
+            # Создаем параметры по умолчанию для обратной совместимости
+            from ..models.generation import FineTuningRequest
+            fine_tuning_params = FineTuningRequest()
+
+        task_data = {
+            "dataset_id": project_id,
+            "use_llm_judge": fine_tuning_params.use_llm_judge,
+            "judge_model_id": fine_tuning_params.judge_model_id,
+            "base_model_name": fine_tuning_params.base_model_name,
+            "n_trials": fine_tuning_params.n_trials
+        }
+
+        # 4. Отправляем задачу в очередь GPU
         celery_app = get_celery_app()
         task = celery_app.send_task(
             'tasks.fine_tune_lora_task',
-            kwargs={'dataset_id': project_id},
+            kwargs=task_data,
             queue='gpu_queue'
         )
 
         logger.info(f"Задача дообучения LoRA отправлена для проекта {project_id}, task_id: {task.id}")
+        logger.info(f"Параметры fine-tuning: LLM Judge={'включен' if fine_tuning_params.use_llm_judge else 'выключен'}, "
+                    f"judge_model={fine_tuning_params.judge_model_id or 'по умолчанию'}, "
+                    f"base_model={fine_tuning_params.base_model_name or 'по умолчанию'}, "
+                    f"n_trials={fine_tuning_params.n_trials}")
 
         return TaskResponse(
             success=True,

@@ -149,10 +149,22 @@ class LLMJudgeEvaluator:
 class ModelEvaluator:
     """Комбинированная оценка модели через BERTScore + LLM Judge"""
     
-    def __init__(self, judge_model_id: str = None):
+    def __init__(self, judge_model_id: str = None, use_llm_judge: bool = True):
+        """
+        Args:
+            judge_model_id: ID модели для LLM Judge
+            use_llm_judge: Использовать ли LLM Judge для оценки
+        """
         self.bert_evaluator = BERTScoreEvaluator()
-        self.llm_evaluator = LLMJudgeEvaluator(judge_model_id)
+        self.use_llm_judge = use_llm_judge
         
+        if self.use_llm_judge:
+            self.llm_evaluator = LLMJudgeEvaluator(judge_model_id)
+            logger.info(f"ModelEvaluator инициализирован с LLM Judge (модель: {judge_model_id or 'по умолчанию'})")
+        else:
+            self.llm_evaluator = None
+            logger.info("ModelEvaluator инициализирован без LLM Judge (только BERTScore)")
+
     def generate_predictions(self, model, tokenizer, validation_data: List[Dict[str, str]], 
                            system_prompt: str = None) -> List[str]:
         """
@@ -234,7 +246,7 @@ class ModelEvaluator:
     def detailed_evaluate(self, model, tokenizer, validation_data: List[Dict[str, str]], 
                          system_prompt: str = None, target_style: str = "Russian street slang") -> Dict[str, float]:
         """
-        Детальная оценка через BERTScore + LLM Judge
+        Детальная оценка через BERTScore + LLM Judge (если включен)
         
         Args:
             model: Обученная PEFT модель
@@ -253,17 +265,28 @@ class ModelEvaluator:
         references = [item['output'] for item in validation_data]
         originals = [item['input'] for item in validation_data]
         
-        # BERTScore оценка
+        # BERTScore оценка (всегда выполняется)
         bert_score = self.bert_evaluator.evaluate(predictions, references)
         
-        # LLM Judge оценка (на выборке)
-        llm_score = self.llm_evaluator.evaluate_batch(originals, predictions, target_style)
-        
-        # Комбинированная метрика
-        combined_score = bert_score * 0.4 + (llm_score / 100.0) * 0.6
-        
-        return {
+        result = {
             'bert_score': bert_score,
-            'llm_judge_score': llm_score,
-            'combined_score': combined_score
-        } 
+        }
+        
+        # LLM Judge оценка (только если включен)
+        if self.use_llm_judge and self.llm_evaluator:
+            llm_score = self.llm_evaluator.evaluate_batch(originals, predictions, target_style)
+            result['llm_judge_score'] = llm_score
+            
+            # Комбинированная метрика (BERTScore 40% + LLM Judge 60%)
+            combined_score = bert_score * 0.4 + (llm_score / 100.0) * 0.6
+            result['combined_score'] = combined_score
+            
+            logger.info(f"Детальная оценка: BERTScore={bert_score:.4f}, LLM Judge={llm_score:.2f}, Combined={combined_score:.4f}")
+        else:
+            # Если LLM Judge выключен, используем только BERTScore
+            result['llm_judge_score'] = None
+            result['combined_score'] = bert_score  # Используем только BERTScore как финальную метрику
+            
+            logger.info(f"Детальная оценка (без LLM Judge): BERTScore={bert_score:.4f}")
+        
+        return result 

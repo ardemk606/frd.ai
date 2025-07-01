@@ -193,15 +193,25 @@ def fine_tune_lora(model, tokenizer, dataset, lora_params: Dict[str, Any], outpu
 class LoRATuner:
     """Основной класс для дообучения LoRA с байесовской оптимизацией"""
     
-    def __init__(self, config: LoRATuningConfig = None, judge_model_id: str = None):
+    def __init__(self, config: LoRATuningConfig = None, judge_model_id: str = None, use_llm_judge: bool = True):
         """
         Args:
             config: Конфигурация для дообучения
             judge_model_id: ID модели для LLM Judge оценки
+            use_llm_judge: Использовать ли LLM Judge для оценки (по умолчанию True)
         """
         self.config = config or LoRATuningConfig.from_env()
+        self.use_llm_judge = use_llm_judge
         self.optimizer = BayesianOptimizer(n_trials=self.config.n_trials)
-        self.evaluator = ModelEvaluator(judge_model_id)
+        
+        # Создаем evaluator только если нужен LLM Judge
+        if self.use_llm_judge:
+            self.evaluator = ModelEvaluator(judge_model_id, use_llm_judge=True)
+            logger.info(f"LLM Judge включен с моделью: {judge_model_id or 'по умолчанию'}")
+        else:
+            self.evaluator = ModelEvaluator(judge_model_id=None, use_llm_judge=False)
+            logger.info("LLM Judge выключен, будет использоваться только BERTScore")
+        
         self.model = None
         self.tokenizer = None
         self.dataset = None
