@@ -1,0 +1,92 @@
+version: '3.8'
+
+# Пример docker-compose для включения MLflow в FRDA платформу
+# Использование: docker-compose -f docker-compose.yml -f docker-compose.mlflow.yml up
+
+services:
+  # MLflow Tracking Server
+  mlflow:
+    image: python:3.11-slim
+    container_name: frda-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+      - mlflow_artifacts:/mlflow/artifacts
+    environment:
+      MLFLOW_BACKEND_STORE_URI: sqlite:///mlflow/mlflow.db
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    command: >
+      bash -c "
+        pip install mlflow>=2.8.0 &&
+        mkdir -p /mlflow/artifacts &&
+        mlflow server 
+        --host 0.0.0.0 
+        --port 5000 
+        --backend-store-uri sqlite:///mlflow/mlflow.db
+        --default-artifact-root /mlflow/artifacts
+        --serve-artifacts
+      "
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - frda-network
+
+  # Обновляем worker для использования MLflow
+  worker:
+    environment:
+      # MLflow настройки
+      MLFLOW_ENABLED: "true"
+      MLFLOW_TRACKING_URI: "http://mlflow:5000"
+      MLFLOW_EXPERIMENT_NAME: "LoRA_Fine_Tuning"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
+  # Обновляем API для передачи MLflow настроек
+  api:
+    environment:
+      # Опционально: можно передавать MLflow URL в фронтенд
+      MLFLOW_UI_URL: "http://localhost:5000"
+
+volumes:
+  mlflow_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./mlflow_data
+  
+  mlflow_artifacts:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./mlflow_artifacts
+
+networks:
+  frda-network:
+    external: true
+
+# Инструкции по использованию:
+#
+# 1. Создайте директории для данных:
+#    mkdir -p mlflow_data mlflow_artifacts
+#
+# 2. Запустите с MLflow:
+#    docker-compose -f docker-compose.yml -f docker-compose.mlflow.yml up -d
+#
+# 3. Откройте MLflow UI:
+#    http://localhost:5000
+#
+# 4. Для отключения MLflow:
+#    docker-compose -f docker-compose.yml up -d
+#
+# 5. Очистка MLflow данных:
+#    docker-compose down
+#    sudo rm -rf mlflow_data mlflow_artifacts 

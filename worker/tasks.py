@@ -78,6 +78,7 @@ def fine_tune_lora_task(
     judge_model_id: str = None,
     base_model_name: str = None,
     n_trials: int = 20,
+    enable_mlflow: bool = None,
     **kwargs  # Для обратной совместимости
 ):
     """
@@ -93,6 +94,7 @@ def fine_tune_lora_task(
         judge_model_id: ID модели для LLM Judge.
         base_model_name: Название базовой модели для дообучения.
         n_trials: Количество попыток байесовской оптимизации.
+        enable_mlflow: Включить ли MLflow для отслеживания результатов.
     """
     dataset_path = None
     try:
@@ -105,6 +107,7 @@ def fine_tune_lora_task(
             judge_model_id = kwargs_data.get('judge_model_id')
             base_model_name = kwargs_data.get('base_model_name')
             n_trials = kwargs_data.get('n_trials', 20)
+            enable_mlflow = kwargs_data.get('enable_mlflow')
 
         # Определяем финальное название модели (обратная совместимость)
         final_model_name = base_model_name or model_name
@@ -113,7 +116,7 @@ def fine_tune_lora_task(
         logger.info(f"Параметры: LLM Judge={'включен' if use_llm_judge else 'выключен'}, "
                     f"judge_model={judge_model_id or 'по умолчанию'}, "
                     f"base_model={final_model_name or 'по умолчанию'}, "
-                    f"n_trials={n_trials}")
+                    f"n_trials={n_trials}, MLflow={'включен' if enable_mlflow else 'выключен'}")
         
         self.update_state(state='PROGRESS', meta={'status': 'Получение данных...'})
 
@@ -155,18 +158,21 @@ def fine_tune_lora_task(
         # Переопределяем n_trials из параметров задачи
         config.n_trials = n_trials
         
-        # Создаем tuner с настройками LLM Judge
+        # Создаем tuner с настройками LLM Judge и MLflow
+        # MLflow будет включен автоматически если MLFLOW_ENABLED=true в env
         tuner = LoRATuner(
             config=config, 
             judge_model_id=judge_model_id if use_llm_judge else None,
-            use_llm_judge=use_llm_judge
+            use_llm_judge=use_llm_judge,
+            enable_mlflow=enable_mlflow
         )
         
         final_output_dir = output_dir or f"/app/lora_results/{dataset_id}"
         self.update_state(state='PROGRESS', meta={
             'status': f'Запуск оптимизации, результаты в {final_output_dir}',
             'use_llm_judge': use_llm_judge,
-            'n_trials': n_trials
+            'n_trials': n_trials,
+            'enable_mlflow': enable_mlflow
         })
         
         results = tuner.run_optimization(
@@ -183,7 +189,8 @@ def fine_tune_lora_task(
             'use_llm_judge': use_llm_judge,
             'judge_model_id': judge_model_id,
             'base_model_name': final_model_name,
-            'n_trials': n_trials
+            'n_trials': n_trials,
+            'enable_mlflow': enable_mlflow
         }
         
         self.update_state(state='SUCCESS', meta=results)
