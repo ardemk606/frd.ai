@@ -396,8 +396,14 @@ class LoRATuner:
         
         logger.info(f"Финальные метрики:")
         logger.info(f"  BERTScore: {detailed_metrics['bert_score']:.4f}")
-        logger.info(f"  LLM Judge: {detailed_metrics['llm_judge_score']:.2f}/100")
-        logger.info(f"  Combined: {detailed_metrics['combined_score']:.4f}")
+        
+        # Безопасное логирование LLM Judge - проверяем что значение не None
+        if detailed_metrics['llm_judge_score'] is not None:
+            logger.info(f"  LLM Judge: {detailed_metrics['llm_judge_score']:.2f}/100")
+            logger.info(f"  Combined: {detailed_metrics['combined_score']:.4f}")
+        else:
+            logger.info("  LLM Judge: выключен")
+            logger.info(f"  Combined: {detailed_metrics['combined_score']:.4f} (только BERTScore)")
         
         # Сохраняем результаты
         results = {
