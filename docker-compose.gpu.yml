@@ -30,6 +30,7 @@ services:
       /usr/bin/mc mb myminio/seed-dataset --ignore-existing;
       /usr/bin/mc mb myminio/generated-dataset --ignore-existing;
       /usr/bin/mc mb myminio/lora-adapters --ignore-existing;
+      /usr/bin/mc mb myminio/prompts --ignore-existing;
       echo 'MinIO buckets created successfully';
       "
 
@@ -116,14 +117,11 @@ services:
       - ./data:/app/data
       - ./mock:/app/mock
 
-  # Celery CPU Worker
+  # Celery CPU Worker (для генерации и валидации)
   cpu-worker:
     build:
       context: .
-      dockerfile: ./worker/Dockerfile.uv
-      # Кеширование для быстрой пересборки
-      cache_from:
-        - python:3.11-slim
+      dockerfile: ./worker/Dockerfile.cpu
     container_name: data-generation-cpu-worker
     environment:
       # MinIO Settings
@@ -151,20 +149,12 @@ services:
       # GigaChat Settings
       GIGACHAT_ACCESS_TOKEN: ${GIGACHAT_ACCESS_TOKEN}
       
-      # LoRA Settings
-      LORA_MODEL_NAME: "Qwen/Qwen3-0.6B"
-      LORA_MAX_LENGTH: "512"
-      LORA_NUM_EPOCHS: "3"
-      LORA_BATCH_SIZE: "4"
-      LORA_GRAD_ACCUM_STEPS: "2"
-      LORA_LOGGING_STEPS: "10"
-      LORA_SAVE_STEPS: "500"
-      LORA_EVAL_STEPS: "500"
-      LORA_WARMUP_STEPS: "100"
-      LORA_N_TRIALS: "20"
-      
       # Worker Settings
       WORKER_QUEUES: "celery,cpu_queue"
+      
+      # Force CPU usage for this worker
+      CUDA_VISIBLE_DEVICES: ""
+      OMP_NUM_THREADS: "8"
     depends_on:
       postgres:
         condition: service_healthy
@@ -179,13 +169,11 @@ services:
       - ./shared:/app/shared
       - ./data:/app/data
 
-  # Celery GPU Worker
+  # Celery GPU Worker (только для обучения)
   gpu-worker:
     build:
       context: .
-      dockerfile: ./worker/Dockerfile.uv
-      cache_from:
-        - python:3.11-slim
+      dockerfile: ./worker/Dockerfile.gpu
     container_name: data-generation-gpu-worker
     deploy:
       resources:
@@ -220,17 +208,17 @@ services:
       # GigaChat Settings
       GIGACHAT_ACCESS_TOKEN: ${GIGACHAT_ACCESS_TOKEN}
       
-      # LoRA Settings
+      # LoRA Settings (GPU-optimized)
       LORA_MODEL_NAME: "Qwen/Qwen3-0.6B"
       LORA_MAX_LENGTH: "512"
       LORA_NUM_EPOCHS: "3"
-      LORA_BATCH_SIZE: "4"
-      LORA_GRAD_ACCUM_STEPS: "2"
+      LORA_BATCH_SIZE: "8"
+      LORA_GRAD_ACCUM_STEPS: "1"
       LORA_LOGGING_STEPS: "10"
       LORA_SAVE_STEPS: "500"
       LORA_EVAL_STEPS: "500"
       LORA_WARMUP_STEPS: "100"
-      LORA_N_TRIALS: "20"
+      LORA_N_TRIALS: "3"
       
       # Worker Settings
       WORKER_QUEUES: "gpu_queue"
@@ -265,14 +253,21 @@ services:
     environment:
       - API_BASE_URL=http://app:7777
 
-  # Inference Worker для плейграунда
+  # Inference Worker для плейграунда (GPU)
   inference-worker:
     build:
       context: ./inference-worker
-      dockerfile: Dockerfile
-    container_name: inference-worker
+      dockerfile: Dockerfile.gpu
+    container_name: inference-worker-gpu
     ports:
       - "8765:8765"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     environment:
       # Модель по умолчанию
       INFERENCE_MODEL_NAME: "Qwen/Qwen3-0.6B"
@@ -285,20 +280,11 @@ services:
       # CUDA Settings
       CUDA_VISIBLE_DEVICES: "0"
       TORCH_CUDA_ARCH_LIST: "7.5;8.0;8.6;8.9;9.0"
-
     volumes:
       # Подключаем адаптеры из MinIO (если будут скачиваться локально)
       - ./adapters:/app/adapters
       # Кеш для моделей HuggingFace
       - inference_cache:/app/cache
-
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
 volumes:
   minio_data:

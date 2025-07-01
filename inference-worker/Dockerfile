@@ -7,10 +7,11 @@ RUN apt-get clean && \
     gcc \
     g++ \
     curl \
+    git \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Установка UV - ультра быстрого менеджера пакетов Python
+# Установка UV
 RUN pip install uv
 
 WORKDIR /app
@@ -20,17 +21,18 @@ WORKDIR /app
 # =============================================================================
 FROM base AS dependencies
 
-COPY worker/requirements.txt ./requirements.txt
+COPY requirements.txt ./requirements.txt
 
 RUN uv venv /opt/venv
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Устанавливаем PyTorch с CUDA поддержкой
+
 RUN uv pip install torch --index-url https://download.pytorch.org/whl/cu118
 
-# Установка остальных зависимостей
+
+# Установка остальных зависимостей (исключая torch чтобы избежать конфликтов)
 RUN grep -v "^torch" requirements.txt > requirements_clean.txt && \
     uv pip install -r requirements_clean.txt
 
@@ -40,15 +42,10 @@ RUN grep -v "^torch" requirements.txt > requirements_clean.txt && \
 FROM dependencies AS final
 
 # Создаем структуру директорий
-RUN mkdir -p shared data mock
+RUN mkdir -p /app/adapters /app/cache
 
 # Копируем код приложения
-COPY worker/ .
-COPY shared/ ./shared/
-COPY data/ ./data/
-
-# Настройка прав доступа
-RUN chmod +x start.sh
+COPY inference_worker.py .
 
 # Переменные окружения для оптимизации
 ENV PYTHONUNBUFFERED=1
@@ -58,5 +55,15 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Запуск приложения
-CMD ["./start.sh"] 
+# Переменные окружения по умолчанию для inference worker
+ENV INFERENCE_MODEL_NAME="Qwen/Qwen3-0.6B"
+ENV INFERENCE_HOST="0.0.0.0"
+ENV INFERENCE_PORT="8765"
+ENV TRANSFORMERS_CACHE="/app/cache"
+ENV HF_HOME="/app/cache"
+
+# Экспортируем порт
+EXPOSE 8765
+
+# Запускаем inference worker
+CMD ["python", "inference_worker.py"] 
