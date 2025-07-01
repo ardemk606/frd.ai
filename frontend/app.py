@@ -187,6 +187,66 @@ def get_default_model():
     )
 
 
+def get_available_lora_adapters():
+    """Получить список доступных LoRA-адаптеров"""
+    return _make_api_request(
+        "/playground/adapters",
+        "Ошибка при получении списка LoRA-адаптеров",
+        method="GET"
+    )
+
+
+def get_playground_models():
+    """Получить список доступных моделей для плейграунда"""
+    return _make_api_request(
+        "/playground/models",
+        "Ошибка при получении списка моделей",
+        method="GET"
+    )
+
+
+def stream_inference(messages, adapter_id=None, system_prompt=None, max_tokens=512, temperature=0.7, top_k=50, top_p=0.9):
+    """Запустить стриминговый inference"""
+    try:
+        import requests
+        import json
+        
+        base_url = os.getenv("API_BASE_URL", "http://localhost:7777")
+        
+        payload = {
+            "messages": [{"role": msg["role"], "content": msg["content"]} for msg in messages],
+            "adapter_id": adapter_id,
+            "system_prompt": system_prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p
+        }
+        
+        response = requests.post(
+            f"{base_url}/playground/inference/stream", 
+            json=payload,
+            stream=True,
+            headers={'Accept': 'text/plain'},
+            timeout=60
+        )
+        response.raise_for_status()
+        
+        # Генератор для стриминга
+        for line in response.iter_lines():
+            if line:
+                line_str = line.decode('utf-8')
+                if line_str.startswith('data: '):
+                    try:
+                        data = json.loads(line_str[6:])  # Убираем "data: "
+                        yield data
+                    except json.JSONDecodeError:
+                        continue
+                        
+    except Exception as e:
+        yield {"type": "error", "content": f"Ошибка при стриминге: {str(e)}"}
+
+
 def show_status_pipeline(current_status):
     """Отобразить пайплайн статусов"""
     
@@ -413,6 +473,11 @@ with st.sidebar:
     if st.button("Создать проект", key="nav_create", use_container_width=True,
                  type="primary" if st.session_state.current_page == "Создать проект" else "secondary"):
         st.session_state.current_page = "Создать проект"
+        st.rerun()
+    
+    if st.button("🎮 Плейграунд", key="nav_playground", use_container_width=True,
+                 type="primary" if st.session_state.current_page == "Плейграунд" else "secondary"):
+        st.session_state.current_page = "Плейграунд"
         st.rerun()
     
     # Кнопка возврата из детальной страницы
@@ -722,6 +787,197 @@ elif st.session_state.current_page == "Детали проекта":
     
     else:
         st.error("Не удалось загрузить информацию о проекте")
+
+elif st.session_state.current_page == "Плейграунд":
+    st.header("🎮 Плейграунд LoRA-адаптеров")
+    st.caption("Тестируйте свои обученные LoRA-адаптеры в режиме реального времени")
+    
+    # Инициализация состояния плейграунда
+    if "playground_messages" not in st.session_state:
+        st.session_state.playground_messages = []
+    if "playground_current_adapter" not in st.session_state:
+        st.session_state.playground_current_adapter = None
+    
+    # Левая колонка - настройки
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("⚙️ Настройки")
+        
+        # Выбор LoRA-адаптера
+        st.write("**LoRA-адаптер:**")
+        adapters_data = get_available_lora_adapters()
+        
+        if adapters_data and adapters_data.get("success") and adapters_data.get("adapters"):
+            adapters = adapters_data["adapters"]
+            
+            # Добавляем опцию "Без адаптера" (базовая модель)
+            adapter_options = ["Без адаптера (базовая модель)"]
+            adapter_options.extend([f"{adapter['name']} (ID: {adapter['id']})" for adapter in adapters])
+            
+            selected_adapter_option = st.selectbox(
+                "Выберите адаптер:",
+                options=adapter_options,
+                key="adapter_select"
+            )
+            
+            # Определяем выбранный адаптер
+            if selected_adapter_option == "Без адаптера (базовая модель)":
+                selected_adapter = None
+            else:
+                # Извлекаем ID из строки
+                adapter_id = int(selected_adapter_option.split("ID: ")[1].split(")")[0])
+                selected_adapter = next((a for a in adapters if a["id"] == adapter_id), None)
+        else:
+            st.warning("Нет доступных LoRA-адаптеров")
+            selected_adapter = None
+        
+        # Системный промпт
+        st.write("**Системный промпт:**")
+        system_prompt = st.text_area(
+            "Введите системный промпт:",
+            value="Ты полезный ассистент, который отвечает на вопросы пользователей.",
+            height=100,
+            key="playground_system_prompt"
+        )
+        
+        # Параметры генерации
+        st.write("**Параметры генерации:**")
+        
+        max_tokens = st.slider(
+            "Max tokens:",
+            min_value=50,
+            max_value=2048,
+            value=512,
+            step=50,
+            key="playground_max_tokens"
+        )
+        
+        temperature = st.slider(
+            "Temperature:",
+            min_value=0.1,
+            max_value=2.0,
+            value=0.7,
+            step=0.1,
+            key="playground_temperature"
+        )
+        
+        top_k = st.slider(
+            "Top K:",
+            min_value=1,
+            max_value=100,
+            value=50,
+            step=1,
+            key="playground_top_k"
+        )
+        
+        top_p = st.slider(
+            "Top P:",
+            min_value=0.1,
+            max_value=1.0,
+            value=0.9,
+            step=0.05,
+            key="playground_top_p"
+        )
+        
+        # Кнопка очистки истории
+        if st.button("🗑️ Очистить историю", use_container_width=True):
+            st.session_state.playground_messages = []
+            st.rerun()
+    
+    with col2:
+        st.subheader("💬 Чат")
+        
+        # Показываем информацию о текущем адаптере
+        if selected_adapter:
+            st.info(f"🤖 Активный адаптер: {selected_adapter['name']} (Датасет: {selected_adapter['dataset_name']})")
+        else:
+            st.info("🤖 Активна базовая модель (без LoRA-адаптера)")
+        
+        # Отображение истории сообщений
+        message_container = st.container()
+        
+        with message_container:
+            for i, message in enumerate(st.session_state.playground_messages):
+                if message["role"] == "user":
+                    with st.chat_message("user"):
+                        st.write(message["content"])
+                else:
+                    with st.chat_message("assistant"):
+                        st.write(message["content"])
+        
+        # Поле ввода сообщения
+        with st.container():
+            user_input = st.chat_input("Введите ваш вопрос...")
+            
+            if user_input:
+                # Добавляем сообщение пользователя
+                st.session_state.playground_messages.append({
+                    "role": "user",
+                    "content": user_input
+                })
+                
+                # Показываем сообщение пользователя сразу
+                with st.chat_message("user"):
+                    st.write(user_input)
+                
+                # Начинаем генерацию ответа
+                with st.chat_message("assistant"):
+                    response_placeholder = st.empty()
+                    
+                    # Реальный стриминговый inference
+                    try:
+                        # Определяем ID адаптера
+                        adapter_id = selected_adapter["id"] if selected_adapter else None
+                        
+                        # Запускаем стриминг
+                        streamed_text = ""
+                        for data in stream_inference(
+                            messages=st.session_state.playground_messages + [{"role": "user", "content": user_input}],
+                            adapter_id=adapter_id,
+                            system_prompt=system_prompt,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            top_k=top_k,
+                            top_p=top_p
+                        ):
+                            if data.get("type") == "token":
+                                streamed_text += data.get("content", "")
+                                response_placeholder.write(streamed_text)
+                            elif data.get("type") == "error":
+                                st.error(f"Ошибка генерации: {data.get('content')}")
+                                streamed_text = "Произошла ошибка при генерации ответа."
+                                break
+                            elif data.get("type") == "done":
+                                # Используем полный текст из done сообщения если он есть
+                                final_text = data.get("content", streamed_text)
+                                if final_text and final_text != streamed_text:
+                                    streamed_text = final_text
+                                    response_placeholder.write(streamed_text)
+                                break
+                        
+                        # Добавляем ответ в историю
+                        st.session_state.playground_messages.append({
+                            "role": "assistant", 
+                            "content": streamed_text
+                        })
+                        
+                    except Exception as e:
+                        error_message = f"Ошибка подключения к inference worker: {str(e)}"
+                        st.error(error_message)
+                        response_placeholder.write(error_message)
+                        
+                        # Добавляем ошибку в историю
+                        st.session_state.playground_messages.append({
+                            "role": "assistant", 
+                            "content": error_message
+                        })
+        
+        # Информация о статусе
+        if selected_adapter:
+            st.success(f"✅ Готов к работе с LoRA-адаптером: {selected_adapter['name']}")
+        else:
+            st.success("✅ Готов к работе с базовой моделью")
 
 # Отладочная информация (можно убрать позже)
 st.sidebar.write("---")
